@@ -1,0 +1,88 @@
+name: Release macOS installer
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-github-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: startsWith(github.event.release.tag_name, 'desktop-v')
+    runs-on: macos-15
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      GH_REPO: ${{ github.repository }}
+      DSH_TELEMETRY_DISABLED: '1'
+      DSH_GATE_CONCURRENCY: '2'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v5.0.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate release version and build host
+        id: version
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          import { validateDesktopBuildVersion } from './apps/desktop/scripts/desktop-build-version.mjs'
+          const tag = process.env.RELEASE_TAG
+          if (!/^desktop-v[0-9][0-9A-Za-z.-]*$/.test(tag)) throw new Error('Use desktop-v<version> for the release tag')
+          const product = JSON.parse(readFileSync('package.json', 'utf8')).version
+          const requested = tag.slice('desktop-v'.length)
+          const version = validateDesktopBuildVersion(requested, product)
+          if (version !== requested) throw new Error('Release tag must use the normalized build version')
+          const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+          if (version.includes('-') && !event.release.prerelease) throw new Error('Mark prerelease versions as a GitHub prerelease')
+          if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('This build requires an Apple Silicon runner')
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`)
+          NODE
+      - name: Build unsigned Apple Silicon installer
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: pnpm run package:desktop:mac:arm64:unsigned --build-version "$BUILD_VERSION"
+      - name: Verify installer and write checksum
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd apps/desktop/.desktop-build/targets/mac-arm64/unsigned-artifacts
+          installer="deepseek-harness-${BUILD_VERSION}-mac-arm64-unsigned.dmg"
+          test -s "$installer"
+          hdiutil verify "$installer"
+          shasum -a 256 "$installer" > SHA256SUMS.txt
+      - name: Upload installer to the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          directory=apps/desktop/.desktop-build/targets/mac-arm64/unsigned-artifacts
+          gh release upload "$RELEASE_TAG" \
+            "$directory/deepseek-harness-${BUILD_VERSION}-mac-arm64-unsigned.dmg" \
+            "$directory/SHA256SUMS.txt"
+      - name: Retain packaging diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: macos-release-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/desktop/.desktop-build/packaging-runs/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14

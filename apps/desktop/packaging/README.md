@@ -18,6 +18,7 @@ Build Desktop installers locally or through Windows or macOS Actions, choose dep
 - [Windows Actions packaging](#windows-actions)
 - [macOS self-hosted packaging](#macos-actions)
 - [Unsigned Windows test installer](#unsigned-windows-test-installer)
+- [GitHub Release automation](#github-release-automation)
 - [Local macOS DMG without release signing](#local-macos-dmg-without-release-signing)
 - [macOS release signing and diagnostics](#macos-release-signing)
 - [Directory builds and preparation](#directory-and-preparation)
@@ -162,6 +163,14 @@ pnpm run package:desktop:win:x64:unsigned
 The command reads `.env.windows` and requires `DSH_DESKTOP_APP_ID` and the [mandatory-update policy settings](../README.md#mandatory-update-policy), including a real HTTPS service origin. The local run and CI use Node 24; the remaining tools are the root `packageManager` version of pnpm, Git, PowerShell 7 (`pwsh`), tar, Python, Visual C++ Build Tools and a Windows SDK. Set `PYTHON` when Python is absent from `PATH`. It writes the installer to `.desktop-build/targets/win-x64/unsigned-artifacts/`, omits ordinary automatic-update configuration, strips signing credentials, and creates no release completion record. EV and upload credentials are unnecessary. Signed packaging and upload retain their release requirements.
 
 Run `pnpm install --frozen-lockfile`, then `pnpm run package:desktop:win:x64:unsigned --check` to validate configuration and tooling before the full command above. Packaging performs its own complete build and isolated runtime smoke without an online model. Stage logs remain under `.desktop-build/packaging-runs/`; a successful build alone does not qualify the installer. Dependency installation and runtime preparation need access to npm, GitHub release assets and nodejs.org; use the existing registry and proxy configuration when the network requires it. Caches and tool locations belong to the build machine, not tracked personal paths.
+
+<a id="github-release-automation"></a>
+
+## GitHub Release automation
+
+The [Release macOS installer workflow](../../../.github/workflows/macos-github-release.yml) builds an unsigned Apple Silicon DMG on GitHub's hosted `macos-15` runner when a Release is published with a `desktop-v<version>` tag. The tag must include this workflow and its version must match or extend the checkout's product version. For example, product `0.2.2-rc.2` accepts `desktop-v0.2.2-rc.2.20261116.1`; mark versions with prerelease suffixes as **pre-release**. Publishing the Release selects and confirms that build version; saving a draft or pushing a tag alone does not start this workflow.
+
+After packaging checks and DMG verification succeed, the workflow uploads the installer and `SHA256SUMS.txt` to that Release using the repository's built-in token. Enable Actions and allow workflow content writes in repository policy; no personal token, Apple certificate, machine preset or self-hosted runner is required. Review failures in Actions and rerun failed jobs after correcting the cause; existing assets are never overwritten. Packaging diagnostics are retained for 14 days. These unsigned packages require manual installation, omit the macOS Computer Use helper, and have no Apple notarization; see [unsigned macOS limitations](#local-macos-dmg-without-release-signing).
 
 <a id="local-macos-dmg-without-release-signing"></a>
 
