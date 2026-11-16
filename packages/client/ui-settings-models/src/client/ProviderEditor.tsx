@@ -6,6 +6,7 @@
  * has none. The pi-ai profile records that derivation as `apiKeyEnv` only when
  * a key is entered; a blank key materializes a reference-free profile for
  * provider-native authentication);
+ * Anthropic routes also expose request mode and non-secret client headers.
  * the collapsed 自定义设置 area carries the per-family extras (`baseURL` and
  * `retryPolicy` for both families, DeepSeek's id/name/context-window model
  * catalog, and the display name and wire protocol of a pi-ai route the
@@ -43,6 +44,8 @@ import type { SettingsSchemaOperations } from './schema-operations.ts'
 import type { en } from './locales.ts'
 import { ApiKeyInput } from './ApiKeyInput.tsx'
 import { RetryPolicyEditor, retryPolicyDefaults, retryPolicyFailure } from './RetryPolicyEditor.tsx'
+import { RequestModeEditor } from './RequestModeEditor.tsx'
+import { parseClientHeaders } from './request-mode.ts'
 import styles from './ModelsSection.module.css'
 
 /** Per-adapter-family curated field sets (unknown namespaces get the hint alone). */
@@ -219,6 +222,8 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const root = useMemo(() => schema.rehydrate(namespace.schema), [namespace.schema, schema])
   const node = useMemo(() => schema.nodeAtPath(root, settingsPath), [root, schema, settingsPath])
   const fallback = schema.getPath(namespace.value, settingsPath)
+  const [clientHeadersText, setClientHeadersText] = useState(() =>
+    JSON.stringify(schema.getPath(namespace.value, [...settingsPath, 'clientHeaders']) ?? {}, null, 2))
   const disabled = props.readOnly || busy
   const layout = layoutOf(namespace.ns)
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
@@ -260,6 +265,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // What the form currently shows, which is what an interrogation must ask and
   // what decides the protocol's own constraints: an edited-but-unsaved protocol.
   const probeApi = stringAt(draft, 'api') ?? stringAt(fallback, 'api')
+  const supportsClientMode = layout === 'pi-ai' && props.credentialOnly !== true
+    && (probeApi === 'anthropic-messages' || (probeApi === undefined && props.provider === 'anthropic'))
+    && schema.nodeAtPath(root, [...settingsPath, 'requestMode']) !== undefined
+  const requestMode = (schema.getPath(draft, ['requestMode']) ?? schema.getPath(fallback, ['requestMode'])) === 'client-compat'
+    ? 'client-compat' : 'api'
+  const clientHeaders = parseClientHeaders(clientHeadersText)
+  const clientFailure = supportsClientMode && requestMode === 'client-compat' ? clientHeaders.failure : undefined
   const reasoning = protocolReasoningLevels(probeApi, schemaReasoningLevels)
   const editsReasoning = reasoning.levels.length > 0
   const validateModels = (value: unknown): DeepSeekModelsValidationFailure | ReasoningEffortsFailure | undefined =>
@@ -318,10 +330,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const profileDraft = clearsDerivedRef ? schema.deletePath(draft, ['apiKeyEnv']) : draft
     // A pi-ai profile names the conventional reference only when this page is
     // about to store a key. Otherwise the provider keeps its native auth path.
-    const next = layout === 'pi-ai' && stringAt(profileDraft, 'apiKeyEnv') === undefined
+    let next = layout === 'pi-ai' && stringAt(profileDraft, 'apiKeyEnv') === undefined
       && stringAt(schema.getPath(namespace.base, settingsPath), 'apiKeyEnv') === undefined && keyValue.length > 0
       ? schema.setPath(profileDraft, ['apiKeyEnv'], keyRef)
       : profileDraft
+    if (layout === 'pi-ai' && !supportsClientMode && requestMode === 'client-compat' && props.credentialOnly !== true) {
+      next = schema.setPath(next, ['requestMode'], 'api')
+    }
     if (props.credentialOnly !== true) {
       // The same checker gates the submit button, so a card cannot reach this
       // with a bad row; it stays because the schema check below would refuse
@@ -516,6 +531,21 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               ? null
               : <p className={styles[protocolKeyMissing ? 'advancedHint' : 'error']}>{t(shownKeyFailure)}</p>}
           </div>}
+        {supportsClientMode ? <RequestModeEditor
+          mode={requestMode}
+          headers={clientHeadersText}
+          failure={clientFailure}
+          disabled={disabled}
+          t={t}
+          onModeChange={(mode) => { setField('requestMode', mode) }}
+          onHeadersChange={(text) => {
+            setClientHeadersText(text)
+            const parsed = parseClientHeaders(text)
+            if (parsed.headers !== undefined) {
+              setDraft(current => schema.setPath(current, ['clientHeaders'], parsed.headers))
+            }
+          }}
+        /> : null}
         {props.credentialOnly === true ? null : <details
           className={styles['customized']}
           onToggle={(event) => { setCustomizedOpen(event.currentTarget.open) }}
@@ -676,6 +706,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
           || retryFailure !== undefined
+          || clientFailure !== undefined
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}

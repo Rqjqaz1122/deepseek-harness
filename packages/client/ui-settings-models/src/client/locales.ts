@@ -2,6 +2,17 @@
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
+  requestMode: 'Request mode',
+  requestModeApi: 'Standard API',
+  requestModeClient: 'Client compatibility',
+  requestModeApiHint: 'Use the provider’s normal API requests.',
+  requestModeClientHint: 'Send Claude Code version headers and session metadata automatically. DSH still runs the agent and tools.',
+  clientHeaders: 'Client request headers (JSON)',
+  clientHeadersHint: 'Additional non-secret headers are optional; {} is valid. User-Agent includes the configured Claude Code version and DSH identity. Model discovery uses standard headers.',
+  clientHeadersInvalidJson: 'Enter a JSON object mapping header names to strings.',
+  clientHeadersInvalidField: 'Use valid HTTP header names and single-line byte values.',
+  clientHeadersCredentials: 'Use the API key field or provider sign-in for credentials, not client headers.',
+  clientHeadersReserved: 'DSH owns User-Agent; it cannot be replaced here.',
   nav: 'Models',
   deepSeekAccount: 'DeepSeek Account',
   title: 'Models',
@@ -182,6 +193,17 @@ export type ModelsKey = keyof typeof en
 
 /** Chinese strings (same keys as {@link en}). */
 export const zh: { [Key in keyof typeof en]: string } = {
+  requestMode: '请求方式',
+  requestModeApi: '标准 API',
+  requestModeClient: '客户端兼容',
+  requestModeApiHint: '使用提供商的常规 API 请求',
+  requestModeClientHint: '自动发送 Claude Code 版本请求头和会话元数据，仍由 DSH 运行智能体和工具。',
+  clientHeaders: '客户端请求头（JSON）',
+  clientHeadersHint: '可选填不含密钥的附加请求头，保留 {} 即可。User-Agent 包含配置的 Claude Code 版本和 DSH 标识；模型探测使用标准请求头。',
+  clientHeadersInvalidJson: '请输入将请求头名称映射为字符串的 JSON 对象',
+  clientHeadersInvalidField: '请使用有效的 HTTP 请求头名称和不含换行的字节值',
+  clientHeadersCredentials: '凭据请使用 API 密钥字段或提供商登录，不要填入客户端请求头',
+  clientHeadersReserved: 'User-Agent 由 DSH 管理，不能在此替换',
   nav: '模型',
   deepSeekAccount: 'DeepSeek 账号',
   title: '模型',
@@ -359,6 +381,17 @@ export const zh: { [Key in keyof typeof en]: string } = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  requestMode: 'リクエスト方式',
+  requestModeApi: '標準 API',
+  requestModeClient: 'クライアント互換',
+  requestModeApiHint: 'プロバイダーの通常の API リクエストを使用します。',
+  requestModeClientHint: 'Claude Code のバージョンヘッダーとセッションメタデータを自動送信します。エージェントとツールは DSH が実行します。',
+  clientHeaders: 'クライアントヘッダー（JSON）',
+  clientHeadersHint: '追加の非機密ヘッダーは任意です。{} のままで使用できます。User-Agent には設定された Claude Code バージョンと DSH 識別情報が含まれます。モデル検出には標準ヘッダーを使用します。',
+  clientHeadersInvalidJson: 'ヘッダー名を文字列に対応させる JSON オブジェクトを入力してください。',
+  clientHeadersInvalidField: '有効な HTTP ヘッダー名と改行を含まないバイト値を使用してください。',
+  clientHeadersCredentials: '認証情報は API キー欄またはプロバイダーログインで設定してください。',
+  clientHeadersReserved: 'User-Agent は DSH が管理するため、ここでは置き換えられません。',
   'nav': 'モデル',
   'deepSeekAccount': 'DeepSeekアカウント',
   'title': 'モデル',
@@ -536,6 +569,17 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  requestMode: 'Modo de solicitud',
+  requestModeApi: 'API estándar',
+  requestModeClient: 'Compatibilidad con cliente',
+  requestModeApiHint: 'Usa las solicitudes API normales del proveedor.',
+  requestModeClientHint: 'Envía automáticamente cabeceras de versión y metadatos de sesión de Claude Code. DSH sigue ejecutando el agente y las herramientas.',
+  clientHeaders: 'Cabeceras del cliente (JSON)',
+  clientHeadersHint: 'Las cabeceras adicionales sin secretos son opcionales; {} es válido. User-Agent incluye la versión configurada de Claude Code y la identidad de DSH. La detección de modelos usa cabeceras estándar.',
+  clientHeadersInvalidJson: 'Introduce un objeto JSON que asigne nombres de cabecera a cadenas.',
+  clientHeadersInvalidField: 'Usa nombres HTTP válidos y valores de bytes de una sola línea.',
+  clientHeadersCredentials: 'Configura las credenciales mediante el campo de clave API o el inicio de sesión.',
+  clientHeadersReserved: 'DSH gestiona User-Agent; no se puede sustituir aquí.',
   nav: 'Modelos',
   deepSeekAccount: 'Cuenta DeepSeek',
   title: 'Modelos',
@@ -713,6 +757,17 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  requestMode: 'Mode de requête',
+  requestModeApi: 'API standard',
+  requestModeClient: 'Compatibilité client',
+  requestModeApiHint: 'Utilise les requêtes API habituelles du fournisseur.',
+  requestModeClientHint: 'Envoie automatiquement les en-têtes de version et les métadonnées de session Claude Code. DSH exécute toujours l’agent et les outils.',
+  clientHeaders: 'En-têtes client (JSON)',
+  clientHeadersHint: 'Les en-têtes supplémentaires sans secrets sont facultatifs ; {} est valide. User-Agent inclut la version configurée de Claude Code et l’identité DSH. La découverte des modèles utilise les en-têtes standard.',
+  clientHeadersInvalidJson: 'Saisissez un objet JSON associant les noms d’en-têtes à des chaînes.',
+  clientHeadersInvalidField: 'Utilisez des noms HTTP valides et des valeurs en octets sur une seule ligne.',
+  clientHeadersCredentials: 'Configurez les identifiants dans le champ de clé API ou via la connexion au fournisseur.',
+  clientHeadersReserved: 'DSH gère User-Agent ; il ne peut pas être remplacé ici.',
   nav: 'Modèles',
   deepSeekAccount: 'Compte DeepSeek',
   title: 'Modèles',
@@ -890,6 +945,17 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  requestMode: 'Anfragemodus',
+  requestModeApi: 'Standard-API',
+  requestModeClient: 'Client-Kompatibilität',
+  requestModeApiHint: 'Verwendet die normalen API-Anfragen des Anbieters.',
+  requestModeClientHint: 'Sendet automatisch Claude-Code-Versionsheader und Sitzungsmetadaten. DSH führt weiterhin Agent und Werkzeuge aus.',
+  clientHeaders: 'Client-Header (JSON)',
+  clientHeadersHint: 'Zusätzliche Header ohne Geheimnisse sind optional; {} ist gültig. User-Agent enthält die konfigurierte Claude-Code-Version und die DSH-Kennung. Die Modellerkennung verwendet Standardheader.',
+  clientHeadersInvalidJson: 'Geben Sie ein JSON-Objekt ein, das Headernamen auf Zeichenfolgen abbildet.',
+  clientHeadersInvalidField: 'Verwenden Sie gültige HTTP-Headernamen und einzeilige Bytewerte.',
+  clientHeadersCredentials: 'Nutzen Sie für Zugangsdaten das API-Schlüsselfeld oder die Anbieteranmeldung.',
+  clientHeadersReserved: 'User-Agent wird von DSH verwaltet und kann hier nicht ersetzt werden.',
   nav: 'Modelle',
   deepSeekAccount: 'DeepSeek-Konto',
   title: 'Modelle',
@@ -1067,6 +1133,17 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  requestMode: 'Режим запроса',
+  requestModeApi: 'Стандартный API',
+  requestModeClient: 'Совместимость с клиентом',
+  requestModeApiHint: 'Использует обычные API-запросы провайдера.',
+  requestModeClientHint: 'Автоматически отправляет заголовки версии Claude Code и метаданные сеанса. Агент и инструменты выполняются в DSH.',
+  clientHeaders: 'Заголовки клиента (JSON)',
+  clientHeadersHint: 'Дополнительные заголовки без секретов необязательны; {} допустимо. User-Agent содержит настроенную версию Claude Code и идентификатор DSH. Поиск моделей использует стандартные заголовки.',
+  clientHeadersInvalidJson: 'Введите JSON-объект, связывающий имена заголовков со строками.',
+  clientHeadersInvalidField: 'Используйте допустимые HTTP-имена и однострочные байтовые значения.',
+  clientHeadersCredentials: 'Настройте учётные данные через поле API-ключа или вход к провайдеру.',
+  clientHeadersReserved: 'DSH управляет User-Agent; заменить его здесь нельзя.',
   nav: 'Модели',
   deepSeekAccount: 'DeepSeek Аккаунт',
   title: 'Модели',
@@ -1244,6 +1321,17 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  requestMode: 'Modo de solicitação',
+  requestModeApi: 'API padrão',
+  requestModeClient: 'Compatibilidade com cliente',
+  requestModeApiHint: 'Usa as solicitações API normais do provedor.',
+  requestModeClientHint: 'Envia automaticamente cabeçalhos de versão e metadados de sessão do Claude Code. O DSH continua executando o agente e as ferramentas.',
+  clientHeaders: 'Cabeçalhos do cliente (JSON)',
+  clientHeadersHint: 'Cabeçalhos adicionais sem segredos são opcionais; {} é válido. User-Agent inclui a versão configurada do Claude Code e a identidade do DSH. A descoberta de modelos usa cabeçalhos padrão.',
+  clientHeadersInvalidJson: 'Insira um objeto JSON que associe nomes de cabeçalhos a strings.',
+  clientHeadersInvalidField: 'Use nomes HTTP válidos e valores de bytes em uma única linha.',
+  clientHeadersCredentials: 'Configure credenciais no campo da chave API ou pelo login do provedor.',
+  clientHeadersReserved: 'O DSH gerencia User-Agent; ele não pode ser substituído aqui.',
   nav: 'Modelos',
   deepSeekAccount: 'DeepSeek Conta',
   title: 'Modelos',

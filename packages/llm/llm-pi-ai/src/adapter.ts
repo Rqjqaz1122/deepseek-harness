@@ -26,6 +26,7 @@
  * @module dsh-llm-pi-ai/adapter
  */
 
+import { createHash, randomUUID } from 'node:crypto'
 import type {
   Api,
   AuthContext,
@@ -43,6 +44,7 @@ import {
   LlmAdapter,
   LlmError,
   ReasoningEffortId,
+  userAgent,
 } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
@@ -247,15 +249,16 @@ function requestHeaderDiagnostic(error: unknown): string {
 
 /** Prepare request-owned headers without allowing contributors to replace attribution. */
 function requestHeaders(
-  configured: Readonly<Record<string, string>> | undefined,
+  profile: ResolvedPiAiProviderProfile,
   options: GenerateOptions<string>,
   baseURL: string,
   prepare: PiAiAdapterOptions['prepareHeaders'],
+  clientSessionId: string | undefined,
 ): Record<string, string> {
   try {
     const initial = new Headers()
     // Profile aliases overwrite case-insensitively; the Headers constructor appends them.
-    for (const [name, value] of Object.entries(configured ?? {})) initial.set(name, value)
+    for (const [name, value] of Object.entries(profile.inferenceHeaders)) initial.set(name, value)
     const request: PiAiRequestHeaderContext = Object.freeze({
       provider: options.provider,
       model: options.model,
@@ -265,6 +268,10 @@ function requestHeaders(
     })
     const headers = prepare === undefined ? initial : prepare(request, initial)
     for (const [name, value] of Object.entries(attributionHeaders())) headers.set(name, value)
+    if (profile.requestMode === 'client-compat') {
+      headers.set('user-agent', `claude-cli/${profile.clientVersion} (external, cli) ${userAgent()}`)
+      if (clientSessionId !== undefined) headers.set('x-claude-code-session-id', clientSessionId)
+    }
     return Object.fromEntries(headers)
   } catch (error) {
     throw new LlmError(
@@ -417,6 +424,7 @@ export class PiAiAdapter extends LlmAdapter {
     // mid-request builds a separate snapshot, so this request finishes under
     // the one it started with and the next call picks up the new one.
     const profile = this.profileOf(snapshot, options.provider)
+    const clientSessionId = profile.requestMode === 'client-compat' ? options.sessionId ?? randomUUID() : undefined
     const model = this.modelOf(snapshot, options.provider, options.model)
     const updates = conversationUpdates(model)
     // pi-ai collapses Anthropic tool updates without an initially active declaration.
@@ -478,7 +486,17 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
-        headers: requestHeaders(profile.headers, options, model.baseUrl, this.config.prepareHeaders),
+        headers: requestHeaders(profile, options, model.baseUrl, this.config.prepareHeaders, clientSessionId),
+        ...clientSessionId === undefined ? {} : {
+          metadata: {
+            // Use session-scoped identity without disclosing a machine id or claiming an Anthropic account.
+            user_id: JSON.stringify({
+              device_id: createHash('sha256').update(`deepseek-harness:${clientSessionId}`).digest('hex'),
+              account_uuid: '',
+              session_id: clientSessionId,
+            }),
+          },
+        },
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id, digest)[Symbol.asyncIterator]()
       let exhausted = false

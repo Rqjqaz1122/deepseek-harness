@@ -24,6 +24,8 @@
 
 可编辑的密钥草稿非空时，输入框内显示眼睛按钮。选择**显示密钥**检查当前输入，选择**隐藏密钥**重新遮住输入。修改输入后会重新遮住密钥。原生密码框不提供剪切；可选中草稿后按 Backspace 清空，或显示明文后再剪切。已保存凭据仍保持只写。
 
+Anthropic 提供商的**请求方式**可以选择**标准 API**或**客户端兼容**。客户端兼容会自动发送版本请求头和会话元数据，额外的非敏感 JSON 请求头可选填，可以保留 `{}` 并保存。[适配器参考](../../../packages/llm/llm-pi-ai/README.zh.md#client-compatibility-requests)说明请求头优先级与限制。此选项配置的是 DSH 请求，不会启动 Claude Code。
+
 ## 添加自定义模型 API
 
 对于中转站、公司网关、自建服务器或已安装目录中不存在的提供商，把卡片切换到**自定义模型 API**。提供小写 Provider ID、基础 URL、API 协议、凭据和至少一个模型。**API 协议**必须选网关实际使用的那一种，选择框提供四种：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini API，在当前 profile 的 `cordis.patch.yml` 中分别存为 `openai-completions`、`openai-responses`、`anthropic-messages` 和 `google-generative-ai`。Gemini API 的基础 URL 包含 API 版本，例如 `https://gateway.example/v1beta`。一个提供商只使用一种协议，网关同时提供两种时需要建两个提供商。

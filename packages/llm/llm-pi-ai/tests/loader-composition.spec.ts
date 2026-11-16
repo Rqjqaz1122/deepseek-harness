@@ -16,7 +16,8 @@ import { profileComposition } from '../../../settings/settings/tests/profile-com
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { recordKeyFor } from '../src/auth.ts'
 import { assemble } from './assemble.ts'
-import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
+import { anthropicTextEvents, closeMockServers, mockServer, textEvents } from './mock-server.ts'
+import { DEFAULT_CLIENT_VERSION } from '../src/config.ts'
 
 /** One text block, then a tool call truncated by the output-token ceiling. */
 const truncatedToolCallEvents = [
@@ -89,6 +90,97 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
 }
 
 describe('llm-pi-ai real dormant composition', () => {
+  it('switches Anthropic inference headers through persisted settings without changing discovery', async () => {
+    const server = await mockServer([
+      { events: anthropicTextEvents },
+      { body: JSON.stringify({ data: [{ id: 'm', display_name: 'Model' }] }) },
+      { events: anthropicTextEvents },
+    ])
+    const { ctx } = await loadComposition()
+    await ctx.settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', 'gateway'], value: {
+      api: 'anthropic-messages', baseURL: server.url, apiKeyEnv: 'PI_COMPOSITION_KEY',
+      models: [{ id: 'm' }], headers: { 'X-App': 'standard' },
+      requestMode: 'client-compat', clientHeaders: { 'x-app': 'client', 'X-Client-Version': 'example-version' },
+    } }])
+    const first = await assemble(ctx, { provider: 'gateway', model: 'm', messages: [], sessionId: SessionId('client-session') })
+    expect(first.finish).toEqual({ kind: 'stop' })
+    expect(first.message.content).toContainEqual({ type: 'text', text: 'hello' })
+    expect(server.headers[0]).toMatchObject({
+      'x-app': 'client', 'x-client-version': 'example-version',
+      'user-agent': `claude-cli/${DEFAULT_CLIENT_VERSION} (external, cli) ${userAgent()}`,
+      'x-claude-code-session-id': 'client-session',
+    })
+    const firstRequest = server.requests[0] as { metadata: { user_id: string } }
+    const identity = JSON.parse(firstRequest.metadata.user_id) as { device_id: string; account_uuid: string; session_id: string }
+    expect(identity.device_id).toMatch(/^[a-f0-9]{64}$/)
+    expect(identity.account_uuid).toBe('')
+    expect(identity.session_id).toBe('client-session')
+    await expect(ctx.llm.discoverModels('llm-pi-ai', {
+      provider: 'gateway', baseURL: server.url, api: 'anthropic-messages',
+    })).resolves.toEqual([{ id: 'm', name: 'Model' }])
+    expect(server.headers[1]?.['x-app']).toBe('standard')
+    expect(server.headers[1]).not.toHaveProperty('x-client-version')
+    expect(server.headers[1]?.['user-agent']).toBe(userAgent())
+    expect(server.headers[1]).not.toHaveProperty('x-claude-code-session-id')
+    await ctx.settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', 'gateway', 'requestMode'], value: 'api' }])
+    const second = await assemble(ctx, { provider: 'gateway', model: 'm', messages: [] })
+    expect(second.finish).toEqual({ kind: 'stop' })
+    expect(server.headers[2]?.['x-app']).toBe('standard')
+    expect(server.headers[2]).not.toHaveProperty('x-client-version')
+    expect(server.headers[2]?.['user-agent']).toBe(userAgent())
+    expect(server.headers[2]).not.toHaveProperty('x-claude-code-session-id')
+    expect(server.requests[2]).not.toHaveProperty('metadata')
+    expect(server.paths).toEqual(['/v1/messages?beta=true', '/v1/models?limit=1000', '/v1/messages?beta=true'])
+  })
+
+  it('sends the configured client version without extra headers and enforces it after contributors', async () => {
+    const server = await mockServer([{ events: anthropicTextEvents }])
+    const { ctx } = await loadComposition()
+    await ctx.settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', 'gateway'], value: {
+      api: 'anthropic-messages', baseURL: server.url, apiKeyEnv: 'PI_COMPOSITION_KEY',
+      models: [{ id: 'm' }], requestMode: 'client-compat', clientVersion: '2.1.323',
+    } }])
+    ctx.on('llm-pi-ai/request-headers', (_request, headers, next) => {
+      headers.set('user-agent', 'untrusted-version')
+      return next()
+    })
+    const result = await assemble(ctx, { provider: 'gateway', model: 'm', messages: [] })
+    expect(result.finish).toEqual({ kind: 'stop' })
+    expect(server.headers[0]).toMatchObject({
+      'x-app': 'cli', 'user-agent': `claude-cli/2.1.323 (external, cli) ${userAgent()}`,
+    })
+    const clientSessionId = server.headers[0]?.['x-claude-code-session-id']
+    expect(clientSessionId).toEqual(expect.stringMatching(/^[a-f0-9-]{36}$/))
+    const request = server.requests[0] as { metadata: { user_id: string } }
+    expect(JSON.parse(request.metadata.user_id)).toMatchObject({ session_id: clientSessionId })
+  })
+
+  it('retains DSH prompts and tools and reuses client identity within one Session', async () => {
+    const server = await mockServer([{ events: anthropicTextEvents }, { events: anthropicTextEvents }])
+    const { ctx } = await loadComposition()
+    await ctx.settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', 'gateway'], value: {
+      api: 'anthropic-messages', baseURL: server.url, apiKeyEnv: 'PI_COMPOSITION_KEY',
+      models: [{ id: 'm' }], requestMode: 'client-compat',
+    } }])
+    const request = {
+      provider: 'gateway', model: 'm', sessionId: SessionId('dsh-session'), system: 'DSH system prompt',
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'DSH user message' }], source: { kind: 'user' } })],
+      tools: [{ name: 'dsh_echo', description: 'Echo text', parameters: { type: 'object', properties: {} } }],
+    }
+    await assemble(ctx, request)
+    await assemble(ctx, request)
+    const body = server.requests[0] as {
+      system: { text: string }[]
+      messages: { role: string; content: { text: string }[] }[]
+      tools: { name: string }[]
+    }
+    expect(body.system.map(block => block.text)).toEqual(['DSH system prompt'])
+    expect(body.messages).toMatchObject([{ role: 'user', content: [{ text: 'DSH user message' }] }])
+    expect(body.tools.map(tool => tool.name)).toEqual(['dsh_echo'])
+    const bodies = server.requests as { metadata: { user_id: string } }[]
+    expect(bodies[0]?.metadata).toEqual(bodies[1]?.metadata)
+  })
+
   it('dispatches header contributors through the Loader-mounted adapter', async () => {
     const server = await mockServer([{ events: textEvents }])
     const { ctx, settingsPath } = await loadComposition()

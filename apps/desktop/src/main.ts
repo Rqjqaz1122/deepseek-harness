@@ -20,6 +20,7 @@ import {
   powerMonitor,
   nativeImage,
   nativeTheme,
+  net,
   protocol,
   session,
   shell,
@@ -36,11 +37,12 @@ import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
 import { readDeviceInfo } from './device-info.ts'
-import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
+import { desktopManualUpdateConfirmation, desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import type { DesktopMessages } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { desktopUpdateChannel } from './update-channel.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
+import { desktopManualUpdateRepository, githubManualUpdateSource } from './github-update.ts'
 import { prepareDesktopUpdateWindow } from './update-window.ts'
 import { DesktopCommandManager } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest, removeLegacyHostCookies } from './web-document.ts'
@@ -695,6 +697,10 @@ async function main(): Promise<void> {
   }
 
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
+  const manualRepository = desktopManualUpdateRepository(manifest)
+  const manualSource = !app.isPackaged || manualRepository === undefined ? undefined
+    : githubManualUpdateSource(manualRepository, process.platform, process.arch,
+      (url, init) => net.fetch(url, init), url => shell.openExternal(url))
   const packagedChannel = desktopUpdateChannel(manifest)
   const channelSettings = new DesktopUpdateSettings(app.getPath('userData'), packagedChannel)
   const initialChannel = await channelSettings.load()
@@ -760,6 +766,7 @@ async function main(): Promise<void> {
     undefined, undefined, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
     updateChannel,
+    undefined, manualSource,
   )
 
   if (initialChannel.kind === 'error') updates.suspendConfiguration(initialChannel.error.path)
@@ -1058,7 +1065,7 @@ async function main(): Promise<void> {
         if (state.phase === 'error' && state.failedOperation === 'check') { await showUpdateFailure(state); return }
         if (state.phase === 'idle') {
           await ordinaryMessageBox({ type: 'info', title: locale.messages.updateCheckTitle,
-            message: locale.messages.updateCurrent,
+            message: updates.manualInstallation ? locale.messages.updateManualCurrent : locale.messages.updateCurrent,
             detail: formatDesktopMessage(locale.messages.updateCurrentDetail, { version: app.getVersion() }) })
           return
         }
@@ -1070,6 +1077,17 @@ async function main(): Promise<void> {
           return
         }
         if (state.phase !== 'available' && !(state.phase === 'error' && state.failedOperation === 'download')) return
+        if (updates.manualInstallation) {
+          const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
+            ...desktopManualUpdateConfirmation(locale.messages, state.version ?? '') })
+          if (result.response !== 0 || isMandatory() || state.version === undefined) return
+          try { await updates.openReleasePage(state.version, revision) } catch (error) {
+            console.error('desktop update: release page could not be opened', error)
+            await ordinaryMessageBox({ type: 'error', title: locale.messages.updateCheckTitle,
+              message: locale.messages.updateOpenReleaseFailed })
+          }
+          return
+        }
         if (manual) {
           const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: state.version ?? '' }),

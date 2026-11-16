@@ -40,6 +40,8 @@ import { protocolNeedsKey, protocolReasoningLevels } from './protocol-rules.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { en, ModelsKey } from './locales.ts'
 import styles from './ModelsSection.module.css'
+import { RequestModeEditor } from './RequestModeEditor.tsx'
+import { parseClientHeaders } from './request-mode.ts'
 
 /** The settings namespace a hand-declared provider is written into. */
 const NS = 'llm-pi-ai'
@@ -115,6 +117,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [displayName, setDisplayName] = useState('')
   const [baseURL, setBaseURL] = useState('')
   const [protocol, setProtocol] = useState(protocols[0] ?? '')
+  const [requestMode, setRequestMode] = useState<'api' | 'client-compat'>('api')
+  const [clientHeadersText, setClientHeadersText] = useState('{}')
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
   const [busy, setBusy] = useState(false)
@@ -149,16 +153,19 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   // string, which the create path reads as "no key supplied" — a route may
   // legitimately authenticate through the provider's own ambient discovery.
   const keyValue = keyDraft.trim()
+  const clientHeaders = parseClientHeaders(clientHeadersText)
+  const clientMode = protocol === 'anthropic-messages' && requestMode === 'client-compat'
+  const clientFailure = clientMode ? clientHeaders.failure : undefined
   const ready = route.length > 0 && !routeInvalid && !routeTaken
     && normalizedBaseURL.length > 0 && !baseUrlInvalid && models.length > 0 && modelFailure === undefined
-    && keyFailure === undefined
+    && keyFailure === undefined && clientFailure === undefined
   // The one blocked gate worth a line under the form. A satisfied card says
   // nothing at all rather than printing an empty paragraph.
   const hint = failure !== undefined || ready
     // The key field prints its own failure directly beneath itself, so a card
     // blocked only by the key stays silent here rather than answering with the
     // next unmet gate — which is satisfied, and reads as a second, false fault.
-    || keyFailure !== undefined
+    || keyFailure !== undefined || clientFailure !== undefined
     // Same for the route id, and it must be tested rather than assumed: the
     // fallback arm below reads "no models yet", so an unmet route gate would
     // fall through to it and contradict the filled-in list right above.
@@ -185,6 +192,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         api: protocol,
         baseURL: normalizedBaseURL,
         models: models.map(model => ({ ...model })),
+        ...clientMode ? { requestMode, clientHeaders: clientHeaders.headers } : {},
       }
       // `taken` is a snapshot too, so the id check alone cannot see a route
       // declared after this card opened; the revision makes that race a
@@ -284,6 +292,15 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           {protocols.map(choice => <option key={choice} value={choice}>{protocolLabel(t, choice)}</option>)}
         </select>
       </div>
+      {protocol === 'anthropic-messages' ? <RequestModeEditor
+        mode={requestMode}
+        headers={clientHeadersText}
+        failure={clientFailure}
+        disabled={profileDisabled}
+        t={t}
+        onModeChange={setRequestMode}
+        onHeadersChange={setClientHeadersText}
+      /> : null}
       <div className={styles['field']}>
         <span className={styles['fieldLabel']}>{t('keyInput')}</span>
         <ApiKeyInput

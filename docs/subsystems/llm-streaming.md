@@ -333,6 +333,8 @@ interface AppIdentity {
 }
 ```
 
+The pi-ai adapter’s opt-in [client compatibility preset](../../packages/llm/llm-pi-ai/README.md#client-compatibility-requests) prefixes its inference `User-Agent` with the configured Claude Code version and retains the complete Harness identity afterward. Ordinary API and discovery requests keep the standard identity.
+
 ## `TokenUsage`
 
 Per-call token accounting. Counts are **disjoint**: `inputTokens` is uncached input only; cached input is reported separately, and billed input is the sum of the three. Adapters whose providers fold cache hits into a single prompt total (DeepSeek's `prompt_tokens`) subtract them back out. Optional `totalTokens` is an exact aggregate prompt-plus-output count preserved from the provider or reconstructed from authoritative aggregate counters; adapters omit it when unavailable or inconsistent. `reasoningTokens`, when present, is informational detail already included in `outputTokens`; totals must not add it again.

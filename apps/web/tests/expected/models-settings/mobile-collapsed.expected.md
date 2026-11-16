@@ -22,6 +22,11 @@
       - text: Acme 网关 acme-gateway API 密钥
       - textbox "API 密钥":
         - /placeholder: 输入 API 密钥
+      - text: 请求方式
+      - combobox "请求方式":
+        - option "标准 API" [selected]
+        - option "客户端兼容"
+      - paragraph: 使用提供商的常规 API 请求
       - group:
         - text: 自定义设置 显示名称
         - textbox "显示名称":

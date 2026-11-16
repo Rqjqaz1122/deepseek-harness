@@ -46,6 +46,9 @@ import { buildProvider, supportedProtocols } from './provider.ts'
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
 
+/** Claude Code release used by the opt-in compatibility preset; overridable through clientVersion. */
+export const DEFAULT_CLIENT_VERSION = '2.1.322'
+
 /**
  * Default request-level bound on base64-encoded image payload. Every image in
  * history is re-encoded into every request body, so an unbounded conversation
@@ -163,6 +166,15 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
+  /**
+   * Inference format; omission uses standard API. Client compatibility adds
+   * Claude Code version headers and session metadata on Anthropic Messages routes.
+   */
+  requestMode?: 'api' | 'client-compat'
+  /** Claude Code version advertised in client-compat mode; defaults to the pinned release, without runtime update requests. */
+  clientVersion?: string
+  /** Optional non-secret inference headers used only in client-compat mode; model discovery keeps ordinary headers. */
+  clientHeaders?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
@@ -209,7 +221,13 @@ export interface PiAiProviderProfile {
 
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
 export interface ResolvedPiAiProviderProfile
-  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName'> {
+  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName' | 'requestMode' | 'clientVersion'> {
+  /** Resolved inference format; existing profiles use api. */
+  requestMode: 'api' | 'client-compat'
+  /** Validated major.minor.patch version advertised only by the client-compat preset. */
+  clientVersion: string
+  /** Request-owned header defaults after case-insensitive client overrides; discovery uses headers instead. */
+  inferenceHeaders: Record<string, string>
   /** Harness route key and the `Models` collection key (the configuration dict key). */
   provider: string
   /** Resolved display name for selectors and configuration surfaces. */
@@ -364,6 +382,9 @@ const profile = z.object({
   defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
   headers: z.dict(z.string()),
+  requestMode: z.union(['api', 'client-compat']),
+  clientVersion: z.string().default(DEFAULT_CLIENT_VERSION),
+  clientHeaders: z.dict(z.string()),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
   cacheRetention: z.union(['none', 'short', 'long']),
@@ -457,6 +478,21 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     assertValidHeaders(provider, source.headers)
+    const clientHeaders = source.clientHeaders ?? {}
+    assertValidHeaders(provider, clientHeaders)
+    for (const name of Object.keys(clientHeaders)) {
+      if (name.toLowerCase() === 'user-agent') {
+        throw new Error(`llm-pi-ai: provider "${provider}" clientHeaders cannot replace the Harness User-Agent`)
+      }
+      if (['authorization', 'proxy-authorization', 'x-api-key', 'cookie', 'set-cookie'].includes(name.toLowerCase())) {
+        throw new Error(`llm-pi-ai: provider "${provider}" clientHeaders cannot contain credential header "${name}"; use the provider credential configuration`)
+      }
+    }
+    const requestMode = source.requestMode ?? 'api'
+    const clientVersion = source.clientVersion ?? DEFAULT_CLIENT_VERSION
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(clientVersion)) {
+      throw new Error(`llm-pi-ai: provider "${provider}" clientVersion must use major.minor.patch, for example ${DEFAULT_CLIENT_VERSION}`)
+    }
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -513,6 +549,10 @@ export function resolveProfiles(
         defaultContextWindow: source.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
         defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
       }, validation)
+      if (requestMode === 'client-compat'
+        && (catalog.models.length === 0 || catalog.models.some(model => model.api !== 'anthropic-messages'))) {
+        throw new Error(`llm-pi-ai: provider "${provider}" client-compat mode requires Anthropic Messages models`)
+      }
       catalogError = catalog.modelErrors.values().next().value
       piProvider = buildProvider({
         provider,
@@ -527,10 +567,19 @@ export function resolveProfiles(
       catalogError ??= error.message
     }
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    const inferenceHeaders = new Headers()
+    for (const [name, value] of Object.entries(source.headers ?? {})) inferenceHeaders.set(name, value)
+    if (requestMode === 'client-compat') {
+      inferenceHeaders.set('x-app', 'cli')
+      for (const [name, value] of Object.entries(clientHeaders)) inferenceHeaders.set(name, value)
+    }
     resolved.set(provider, {
       ...rest,
       provider,
       displayName,
+      requestMode,
+      clientVersion,
+      inferenceHeaders: Object.fromEntries(inferenceHeaders),
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
       streamIdleTimeoutMs,
       maxRequestImageBytes,
@@ -540,6 +589,7 @@ export function resolveProfiles(
       requestImageMaxBytes,
       retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
+      ...rest.clientHeaders === undefined ? {} : { clientHeaders: { ...rest.clientHeaders } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),
       modelErrors: catalog?.modelErrors ?? new Map(),

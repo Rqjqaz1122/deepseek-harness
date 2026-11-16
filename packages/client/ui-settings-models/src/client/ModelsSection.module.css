@@ -840,6 +840,15 @@ select.input {
   cursor: default;
 }
 
+.clientHeaders {
+  height: auto;
+  min-height: 100px;
+  padding: 8px 10px;
+  resize: vertical;
+  font-family: var(--ds-font-family-code);
+  line-height: 20px;
+}
+
 .keyInput {
   position: relative;
 }

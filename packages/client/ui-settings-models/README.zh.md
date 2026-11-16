@@ -81,6 +81,8 @@ pi-ai 容量字段为空时，上下文窗口显示 `1M`，最大输出 token �
 
 Models 页面包含 **DeepSeek 账号**（`deepseek-account`，英文为 **DeepSeek Account**）。该行显示 **已登录** 状态，不提供编辑器：模型来自账号的模型列表，[模型覆盖](../../llm/llm-deepseek-account/README.zh.md#use-this-package)写在 `cordis.patch.yml` 中。账号可用模型目录为空时隐藏账号行，包括登录前和退登后；账号模型恢复可用时重新显示。
 
+Anthropic 提供商表单显示**请求方式**，并提供带校验的可选非敏感客户端请求头 JSON 编辑框。客户端预设会提供版本请求头和会话元数据，无需填写额外字段。目录提供商编辑器和自定义 Anthropic 创建表单都会在切换请求方式时保留草稿；启用的请求头 JSON 格式错误时禁止保存。[模型配置指南](../../../docs/user/guide/providers.zh.md)说明用户操作，[适配器参考](../../llm/llm-pi-ai/README.zh.md#client-compatibility-requests)说明请求行为。
+
 -----
 
 <a id="understand-the-implementation"></a>

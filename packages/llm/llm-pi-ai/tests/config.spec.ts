@@ -1,5 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { assertServiceable, Config, resolveProfiles, type Options } from '../src/config.ts'
+import { assertServiceable, Config, DEFAULT_CLIENT_VERSION, resolveProfiles, type Options } from '../src/config.ts'
+
+describe('Anthropic client compatibility configuration', () => {
+  const route = { api: 'anthropic-messages', baseURL: 'https://gateway.test', models: [{ id: 'm' }] }
+
+  it('defaults to API and applies client headers only when explicitly enabled', () => {
+    const profile = { ...route, headers: { 'X-App': 'api' }, clientHeaders: { 'x-app': 'client', 'X-Client-Version': 'example-version' } }
+    const standard = resolveProfiles({ gateway: profile }).get('gateway')!
+    expect(standard.requestMode).toBe('api')
+    expect(standard.clientVersion).toBe(DEFAULT_CLIENT_VERSION)
+    expect(standard.inferenceHeaders).toEqual({ 'x-app': 'api' })
+    const client = resolveProfiles({ gateway: { ...profile, requestMode: 'client-compat' } }).get('gateway')!
+    expect(client.inferenceHeaders).toEqual({ 'x-app': 'client', 'x-client-version': 'example-version' })
+    expect(client.headers).toEqual({ 'X-App': 'api' })
+  })
+
+  it('provides client defaults without requiring additional headers and accepts an explicit version', () => {
+    const client = resolveProfiles({ gateway: { ...route, requestMode: 'client-compat', clientVersion: '2.1.323' } }).get('gateway')!
+    expect(client.clientVersion).toBe('2.1.323')
+    expect(client.inferenceHeaders).toEqual({ 'x-app': 'cli' })
+  })
+
+  it('rejects incompatible protocols, invalid versions and malformed headers before dispatch', () => {
+    expect(() => resolveProfiles({ gateway: { ...route, clientVersion: 'latest' } })).toThrow(/clientVersion must use major.minor.patch/)
+    expect(() => resolveProfiles({ gateway: { ...route, api: 'openai-completions', requestMode: 'client-compat', clientHeaders: { 'x-app': 'client' } } })).toThrow(/requires Anthropic Messages/)
+    expect(() => resolveProfiles({ gateway: { ...route, clientHeaders: { 'invalid name': 'value' } } })).toThrow(/not valid for Fetch/)
+    expect(() => resolveProfiles({ gateway: { ...route, clientHeaders: { 'x-app': 'value\nnext' } } })).toThrow(/not valid for Fetch/)
+    expect(routeWith({ requestMode: 'native' })).toThrow()
+  })
+
+  it.each(['Authorization', 'Proxy-Authorization', 'X-API-Key', 'Cookie', 'Set-Cookie', 'User-Agent'])(
+    'rejects %s in non-secret client headers', (name) => {
+      expect(() => resolveProfiles({ gateway: { ...route, clientHeaders: { [name]: 'value' } } })).toThrow(/cannot/)
+    },
+  )
+})
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>

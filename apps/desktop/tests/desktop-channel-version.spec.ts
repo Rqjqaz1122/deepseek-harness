@@ -36,6 +36,7 @@ it.each(['arm64', 'x64'] as const)('embeds stable in a prerelease macOS %s packa
     APPLE_KEYCHAIN_PROFILE: 'channel-test',
   }, 'darwin', arch)
   expect(config.extraMetadata).toMatchObject({ version, dshDesktopUpdateChannel: 'stable' })
+  expect(config.extraMetadata.dshDesktopManualUpdateRepository).toBeNull()
   expect(config.publish).toEqual([{ provider: 'generic', url: `https://download.deepseek.com/dsh-desk/feeds/mac-${arch}/`, channel: 'stable' }])
 })
 
@@ -51,5 +52,14 @@ it('accepts a stable prerelease in an unsigned Windows x64 configuration', () =>
     DSH_DESKTOP_UNSIGNED: '1',
   }, 'win32', 'x64')
   expect(config.extraMetadata).toMatchObject({ version })
+  expect(config.publish).toBeNull()
+  expect(config.extraMetadata.dshDesktopManualUpdateRepository).toBeNull()
+})
+
+it.each(['arm64', 'x64'] as const)('embeds GitHub manual updates in an unsigned macOS %s package without an automatic feed or policy', (arch) => {
+  const config = createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.local', DSH_DESKTOP_UNSIGNED: '1' }, 'darwin', arch)
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { dshDesktopManualUpdateRepository: string }
+  expect(config.extraMetadata.dshDesktopManualUpdateRepository).toBe(manifest.dshDesktopManualUpdateRepository)
+  expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
   expect(config.publish).toBeNull()
 })

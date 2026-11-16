@@ -1,0 +1,24 @@
+[
+  {
+    "message": "New version available: 0.2.3-rc.1",
+    "detail": "Download the installer for your Mac from GitHub, then quit the app and install it manually.",
+    "buttons": [
+      "Open GitHub release page",
+      "Update later"
+    ],
+    "cancelId": 1,
+    "current": "No newer installer is published on GitHub for this Mac and update channel.",
+    "openFailed": "The download page could not be opened. Check your default browser and try again."
+  },
+  {
+    "message": "发现新版本 0.2.3-rc.1",
+    "detail": "请在 GitHub 下载适合此 Mac 的安装包，然后退出应用并手动安装",
+    "buttons": [
+      "打开 GitHub 下载页",
+      "稍后更新"
+    ],
+    "cancelId": 1,
+    "current": "GitHub 上尚无适用于此 Mac 和当前更新通道的更高版本安装包",
+    "openFailed": "无法打开下载页，请检查默认浏览器后重试"
+  }
+]

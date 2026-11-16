@@ -94,6 +94,11 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
+<a id="client-compatibility-requests"></a>
+### 客户端兼容请求
+
+`requestMode: client-compat` 为 Anthropic Messages 推理请求的 `User-Agent` 添加 Claude Code 版本前缀，随后保留 Harness 标识，并默认发送 `x-app: cli`。可配置的 `clientVersion` 默认值为 `2.1.322`，已于 2026-11-12 核对[官方 npm 发布版本](https://www.npmjs.com/package/@anthropic-ai/claude-code)；适配器不会在运行时检查更新。预设发送 `x-claude-code-session-id`，并将含 `session_id`、空 `account_uuid` 和会话范围 SHA-256 `device_id` 的 JSON 字符串写入 `metadata.user_id`。没有 Session id 的请求使用新生成的 UUID。认证、模型消息和工具保留 DSH 行为，不注入 Claude Code 的系统提示词或计费归属块。可选的 `clientHeaders` 按不区分大小写的名称覆盖常规 `headers` 和预设默认值，空对象也有效。凭据请求头、`User-Agent` 和会话请求头仍由适配器管理。标准 API 模式（`api`，默认值）保留客户端配置但不发送它，模型探测始终使用常规请求头。中转站可能增加其他客户端检查，预设不能保证被所有中转站接受。客户端请求头见[官方网关协议参考](https://code.claude.com/docs/en/llm-gateway-protocol#request-headers)。
+
 ### 登录提供方
 
 pi-ai 提供登录的提供方可以通过 harness 授权 seam 登录：流程提供 OAuth 或交互式密钥提示（密钥键入 pi-ai 自己的登录提示，而非设置表单），得到的凭据存储在 harness 凭据存储的 `llm-pi-ai/<provider id>` 记录中。存储的登录在其路由的 `apiKeyEnv` 覆盖之下完成认证，并在存储的跨进程锁下自行刷新；退出登录即删除存储记录。落在记录文法之外——小写连字符标识符——的手工声明路由键无法登录，因为对它的记录写入会以 `LlmError('UNSTORABLE_PROVIDER_ID')` 拒绝；这类路由改用 `apiKeyEnv` 或提供方 ambient 设置认证。

@@ -849,13 +849,96 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
+  it('edits Anthropic client headers and restores standard API mode', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-models-client-compat'))
+    const provider = 'client-compat-gateway'
+    await scaffold.ctx.settings.mutate('llm-pi-ai', [{ op: 'set', path: ['providers', provider], value: {
+      api: 'anthropic-messages', baseURL: 'https://gateway.example', models: [{ id: 'model' }],
+    } }])
+    try {
+      await openSettings(page, 'zh')
+      const dialog = page.getByRole('dialog', { name: '设置' })
+      await dialog.getByRole('button', { name: '模型', exact: true }).click()
+      await dialog.getByRole('button', { name: `编辑 ${provider}`, exact: true }).click()
+      await dialog.getByLabel('请求方式', { exact: true }).selectOption('client-compat')
+      expect(await dialog.getByRole('button', { name: '保存', exact: true }).isEnabled()).toBe(true)
+      const headers = dialog.getByLabel('客户端请求头（JSON）', { exact: true })
+      await headers.fill('{')
+      expect(await dialog.getByRole('button', { name: '保存', exact: true }).isDisabled()).toBe(true)
+      await headers.fill(JSON.stringify({ 'x-service-client-version': 'documented-value' }, null, 2))
+      const originalViewport = page.viewportSize()!
+      try {
+        for (const width of [390, 760]) {
+          await page.setViewportSize({ width, height: 1000 })
+          await headers.focus()
+          expect(await headers.evaluate(element => element.ownerDocument.activeElement === element)).toBe(true)
+          expect((await headers.boundingBox())!.height).toBeGreaterThanOrEqual(100)
+          expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+          expect(await dialog.getByRole('button', { name: '保存', exact: true }).isEnabled()).toBe(true)
+        }
+      } finally {
+        await page.setViewportSize(originalViewport)
+      }
+      const snapshot = await captureStableAria(
+        page, '[class*="editor"]:has(select[aria-label="请求方式"])', scaffold.workspaceCwd,
+      )
+      await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'client-compat.expected.md'), snapshot, MODE)
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.getByLabel('请求方式', { exact: true }).waitFor({ state: 'detached' })
+      expect(scaffold.ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({
+        providers: { [provider]: { requestMode: 'client-compat', clientHeaders: { 'x-service-client-version': 'documented-value' } } },
+      })
+      await dialog.getByRole('button', { name: `编辑 ${provider}`, exact: true }).click()
+      expect(await dialog.getByLabel('客户端请求头（JSON）', { exact: true }).inputValue()).toContain('documented-value')
+      await dialog.getByLabel('请求方式', { exact: true }).selectOption('api')
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.getByLabel('请求方式', { exact: true }).waitFor({ state: 'detached' })
+      expect(scaffold.ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({
+        providers: { [provider]: { requestMode: 'api', clientHeaders: { 'x-service-client-version': 'documented-value' } } },
+      })
+      await page.keyboard.press('Escape')
+    } finally {
+      await scaffold.ctx.settings.mutate('llm-pi-ai', [{ op: 'unset', path: ['providers', provider] }])
+    }
+  }, 60_000)
+
+  it('creates an Anthropic client-compatible provider through the custom API form', async () => {
+    const provider = 'custom-client-compat'
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-models-custom-client-compat'))
+    try {
+      await openSettings(page, 'zh')
+      const dialog = page.getByRole('dialog', { name: '设置' })
+      await dialog.getByRole('button', { name: '模型', exact: true }).click()
+      await dialog.getByRole('button', { name: '添加模型提供商', exact: true }).click()
+      await dialog.getByRole('tab', { name: '自定义模型 API' }).click()
+      const custom = dialog.getByRole('tabpanel', { name: '自定义模型 API' })
+      await custom.getByLabel('Provider ID').fill(provider)
+      await custom.getByLabel('API 地址').fill('https://gateway.example')
+      await custom.getByLabel('API 协议').selectOption('anthropic-messages')
+      await custom.getByLabel('请求方式', { exact: true }).selectOption('client-compat')
+      await custom.getByRole('button', { name: '添加模型', exact: true }).click()
+      await custom.getByLabel('模型 ID 1').fill('model')
+      const create = custom.getByRole('button', { name: '创建提供商', exact: true })
+      expect(await create.isEnabled()).toBe(true)
+      await custom.getByLabel('客户端请求头（JSON）', { exact: true }).fill('{"x-service-client-version":"documented-value"}')
+      await create.click()
+      await dialog.getByRole('button', { name: `编辑 ${provider}`, exact: true }).waitFor()
+      expect(scaffold.ctx.settings.describe().find(row => row.ns === 'llm-pi-ai')?.value).toMatchObject({
+        providers: { [provider]: { api: 'anthropic-messages', requestMode: 'client-compat', clientHeaders: { 'x-service-client-version': 'documented-value' } } },
+      })
+      await page.keyboard.press('Escape')
+    } finally {
+      await scaffold.ctx.settings.mutate('llm-pi-ai', [{ op: 'unset', path: ['providers', provider] }])
+    }
+  }, 60_000)
+
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'configured.expected.md', 'declared-edit.expected.md', 'declared.expected.md',
       'delete.expected.md', 'empty.expected.md', 'model-picker.expected.md',
       'native-delete.expected.md', 'native-keyless.expected.md', 'catalog-inputs.expected.md',
       'mobile-collapsed.expected.md', 'mobile-expanded.expected.md',
-      'refreshing.expected.md', 'image-only.expected.md',
+      'refreshing.expected.md', 'image-only.expected.md', 'client-compat.expected.md',
     ])
   })
 })

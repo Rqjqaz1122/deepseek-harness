@@ -1,0 +1,14 @@
+- text: client-compat-gateway API 密钥
+- textbox "API 密钥":
+  - /placeholder: 输入 API 密钥
+- text: 请求方式
+- combobox "请求方式":
+  - option "标准 API"
+  - option "客户端兼容" [selected]
+- paragraph: 自动发送 Claude Code 版本请求头和会话元数据，仍由 DSH 运行智能体和工具。
+- text: 客户端请求头（JSON）
+- textbox "客户端请求头（JSON）": "{ \"x-service-client-version\": \"documented-value\" }"
+- paragraph: "可选填不含密钥的附加请求头，保留 {} 即可。User-Agent 包含配置的 Claude Code 版本和 DSH 标识；模型探测使用标准请求头。"
+- group: 自定义设置
+- button "取消"
+- button "保存"

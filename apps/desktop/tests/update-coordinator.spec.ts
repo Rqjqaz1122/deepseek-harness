@@ -6,6 +6,7 @@ import { parseDesktopRelease } from '../src/release.ts'
 import type { DesktopUpdateState } from '../src/ipc.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
 import { zh } from '../src/locale.ts'
+import type { DesktopManualUpdateSource } from '../src/update-coordinator.ts'
 
 vi.mock('electron', () => ({ app: { isPackaged: false } }))
 vi.mock('electron-updater', () => ({
@@ -47,7 +48,7 @@ describe('desktop release metadata', () => {
 const coordinators: InstanceType<typeof DesktopUpdateCoordinator>[] = []
 afterEach(() => { for (const item of coordinators.splice(0)) item.dispose() })
 
-function fixture(channel: 'nightly' | 'stable' = 'nightly', version = '1.1.0-alpha.1', discard?: (updater: AppUpdater) => Promise<void>) {
+function fixture(channel: 'nightly' | 'stable' = 'nightly', version = '1.1.0-alpha.1', discard?: (updater: AppUpdater) => Promise<void>, manual?: DesktopManualUpdateSource) {
   const events = new EventEmitter()
   const checkForUpdates = vi.fn(async () => ({
     isUpdateAvailable: true,
@@ -66,7 +67,7 @@ function fixture(channel: 'nightly' | 'stable' = 'nightly', version = '1.1.0-alp
   const updater = Object.assign(events, { checkForUpdates, downloadUpdate, quitAndInstall }) as unknown as AppUpdater
   const coordinator = new DesktopUpdateCoordinator(
     (state) => { states.push(state); return state },
-    beforeRestart, updater, () => true, () => version, downloadResult, channel, discard,
+    beforeRestart, updater, () => true, () => version, downloadResult, channel, discard, manual,
   )
   coordinators.push(coordinator)
   return { coordinator, updater, events, states, checkForUpdates, downloadUpdate, quitAndInstall, beforeRestart, downloadResult }
@@ -448,4 +449,105 @@ it('does not diagnose a filesystem cause from error wording alone', async () => 
   await f.coordinator.check()
   f.downloadUpdate.mockRejectedValueOnce(new Error('ENOSPC or EACCES in a remote response'))
   expect((await f.coordinator.download('1.1.0-rc.2')).downloadFailure).toBeUndefined()
+})
+
+describe('manual release coordination', () => {
+  function manualFixture() {
+    const check = vi.fn<DesktopManualUpdateSource['check']>(async () =>
+      ({ version: '1.2.0', pageUrl: 'https://github.com/example/harness/releases/tag/v1.2.0' }))
+    const openPage = vi.fn(async (_url: string) => {})
+    const discard = vi.fn(async (_updater: AppUpdater) => {})
+    return { ...fixture('nightly', '1.1.0', discard, { check, openPage }), check, openPage, discard }
+  }
+
+  it('checks metadata and opens a confirmed page without invoking native update or shutdown methods', async () => {
+    const f = manualFixture()
+    expect(f.coordinator.manualInstallation).toBe(true)
+    expect(await f.coordinator.check(true)).toEqual({ phase: 'available', version: '1.2.0' })
+    expect(f.openPage).not.toHaveBeenCalled()
+    expect(await f.coordinator.openReleasePage('1.2.0', f.coordinator.revision)).toBe(true)
+    expect(f.openPage).toHaveBeenCalledWith('https://github.com/example/harness/releases/tag/v1.2.0')
+    await expect(f.coordinator.download('1.2.0')).rejects.toThrow('manual installation')
+    await expect(f.coordinator.install('1.2.0')).rejects.toThrow('manual installation')
+    expect(f.checkForUpdates).not.toHaveBeenCalled()
+    expect(f.downloadUpdate).not.toHaveBeenCalled()
+    expect(f.quitAndInstall).not.toHaveBeenCalled()
+    expect(f.beforeRestart).not.toHaveBeenCalled()
+  })
+
+  it.each(['1.1.0', '1.0.0'])('does not offer the installed or older version %s', async (version) => {
+    const f = manualFixture()
+    f.check.mockResolvedValueOnce({ version, pageUrl: 'https://github.com/example/harness/releases/tag/v1.1.0' })
+    expect(await f.coordinator.check()).toEqual({ phase: 'idle' })
+    expect(await f.coordinator.openReleasePage(version, 0)).toBe(false)
+    expect(f.openPage).not.toHaveBeenCalled()
+  })
+
+  it('coalesces lookups and revokes old confirmations when the channel changes', async () => {
+    const f = manualFixture()
+    await Promise.all([f.coordinator.check(), f.coordinator.check(true)])
+    expect(f.check).toHaveBeenCalledTimes(1)
+    const revision = f.coordinator.revision
+    await f.coordinator.switchChannel('stable', async () => {})
+    expect(f.discard).not.toHaveBeenCalled()
+    expect(await f.coordinator.openReleasePage('1.2.0', revision)).toBe(false)
+    expect(await f.coordinator.openReleasePage('1.3.0', f.coordinator.revision)).toBe(false)
+    expect(f.openPage).not.toHaveBeenCalled()
+    expect(f.check).toHaveBeenLastCalledWith('stable', expect.any(AbortSignal))
+  })
+
+  it('clears a release that is no longer published and rejects invalid versions without opening a page', async () => {
+    const f = manualFixture()
+    await f.coordinator.check(true)
+    f.check.mockResolvedValueOnce(undefined)
+    expect(await f.coordinator.check(true)).toEqual({ phase: 'idle' })
+    expect(await f.coordinator.openReleasePage('1.2.0', 0)).toBe(false)
+    f.check.mockResolvedValueOnce({ version: 'latest', pageUrl: 'https://github.com/example/harness/releases' })
+    expect(await f.coordinator.check(true)).toMatchObject({ phase: 'error', failedOperation: 'check' })
+    expect(f.openPage).not.toHaveBeenCalled()
+  })
+
+  it('aborts an older lookup before checking a newly selected channel', async () => {
+    const f = manualFixture()
+    const entered = Promise.withResolvers<AbortSignal>()
+    f.check.mockImplementationOnce((_channel, signal) => {
+      entered.resolve(signal)
+      return new Promise((_resolve, reject) => { signal.addEventListener('abort', () => { reject(new Error('lookup aborted')) }, { once: true }) })
+    })
+    const pending = f.coordinator.check(true)
+    const signal = await entered.promise
+    await f.coordinator.switchChannel('stable', async () => {})
+    await pending
+    expect(signal.aborted).toBe(true)
+    expect(f.coordinator.state).toEqual({ phase: 'available', version: '1.2.0' })
+    expect(f.states).not.toContainEqual(expect.objectContaining({ phase: 'error' }))
+    expect(f.check).toHaveBeenLastCalledWith('stable', expect.any(AbortSignal))
+  })
+
+  it('retains availability after a browser failure and reports metadata failure until a successful retry', async () => {
+    const f = manualFixture()
+    await f.coordinator.check()
+    f.openPage.mockRejectedValueOnce(new Error('browser unavailable'))
+    await expect(f.coordinator.openReleasePage('1.2.0', 0)).rejects.toThrow('browser unavailable')
+    expect(f.coordinator.state.phase).toBe('available')
+    f.check.mockRejectedValueOnce(new Error('GitHub returned HTTP 403'))
+    expect(await f.coordinator.check(true)).toMatchObject({ phase: 'error', failedOperation: 'check' })
+    expect(await f.coordinator.openReleasePage('1.2.0', 0)).toBe(false)
+    expect(await f.coordinator.check(true)).toEqual({ phase: 'available', version: '1.2.0' })
+  })
+
+  it('aborts an in-flight lookup on disposal and suppresses its late result', async () => {
+    const f = manualFixture()
+    const entered = Promise.withResolvers<AbortSignal>()
+    const result = Promise.withResolvers<{ version: string; pageUrl: string }>()
+    f.check.mockImplementationOnce((_channel, signal) => { entered.resolve(signal); return result.promise })
+    const pending = f.coordinator.check(true)
+    const signal = await entered.promise
+    f.coordinator.dispose()
+    expect(signal.aborted).toBe(true)
+    result.resolve({ version: '2.0.0', pageUrl: 'https://github.com/example/harness/releases/tag/v2.0.0' })
+    await pending
+    expect(f.states).toEqual([])
+    await expect(f.coordinator.openReleasePage('2.0.0', 0)).rejects.toThrow('disposed')
+  })
 })

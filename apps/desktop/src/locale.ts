@@ -1,6 +1,10 @@
 /** Typed shell copy for every shipped language owned by the Electron shell. */
 
 export const en = {
+  updateOpenReleasePage: 'Open GitHub release page',
+  updateManualDetail: 'Download the installer for your Mac from GitHub, then quit the app and install it manually.',
+  updateOpenReleaseFailed: 'The download page could not be opened. Check your default browser and try again.',
+  updateManualCurrent: 'No newer installer is published on GitHub for this Mac and update channel.',
   cliCommandMenu: 'Manage dsh Command…',
   cliCommandTitle: 'Manage dsh Command',
   cliCommandLocation: 'Desktop command: {path}',
@@ -196,6 +200,10 @@ export const en = {
 export type DesktopMessages = { readonly [Key in keyof typeof en]: string }
 
 export const zh = {
+  updateOpenReleasePage: '打开 GitHub 下载页',
+  updateManualDetail: '请在 GitHub 下载适合此 Mac 的安装包，然后退出应用并手动安装',
+  updateOpenReleaseFailed: '无法打开下载页，请检查默认浏览器后重试',
+  updateManualCurrent: 'GitHub 上尚无适用于此 Mac 和当前更新通道的更高版本安装包',
   cliCommandMenu: '管理 dsh 命令…',
   cliCommandTitle: '管理 dsh 命令',
   cliCommandLocation: 'Desktop 命令：{path}',
@@ -389,6 +397,10 @@ export const zh = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  updateOpenReleasePage: 'GitHub のダウンロードページを開く',
+  updateManualDetail: 'GitHub からこの Mac 用のインストーラーをダウンロードし、アプリを終了して手動でインストールしてください。',
+  updateOpenReleaseFailed: 'ダウンロードページを開けませんでした。既定のブラウザーを確認して再試行してください。',
+  updateManualCurrent: 'この Mac と更新チャンネル用の新しいインストーラーは GitHub に公開されていません。',
   cliCommandMenu: 'dsh コマンドを管理…',
   cliCommandTitle: 'dsh コマンドを管理',
   cliCommandLocation: 'デスクトップコマンド: {path}',
@@ -582,6 +594,10 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  updateOpenReleasePage: 'Abrir descarga en GitHub',
+  updateManualDetail: 'Descarga el instalador para este Mac desde GitHub, cierra la aplicación e instálalo manualmente.',
+  updateOpenReleaseFailed: 'No se pudo abrir la página. Comprueba el navegador predeterminado e inténtalo de nuevo.',
+  updateManualCurrent: 'No hay un instalador más reciente en GitHub para este Mac y canal.',
   cliCommandMenu: 'Administrar el comando dsh…',
   cliCommandTitle: 'Administrar el comando dsh',
   cliCommandLocation: 'Comando de escritorio: {path}',
@@ -775,6 +791,10 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  updateOpenReleasePage: 'Ouvrir la page GitHub',
+  updateManualDetail: 'Téléchargez le programme pour ce Mac sur GitHub, quittez l’application et installez-le manuellement.',
+  updateOpenReleaseFailed: 'Impossible d’ouvrir la page. Vérifiez votre navigateur par défaut et réessayez.',
+  updateManualCurrent: 'Aucun programme d’installation plus récent sur GitHub pour ce Mac et ce canal.',
   cliCommandMenu: 'Gérer la commande dsh…',
   cliCommandTitle: 'Gérer la commande dsh',
   cliCommandLocation: 'Commande de bureau : {path}',
@@ -968,6 +988,10 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  updateOpenReleasePage: 'GitHub-Downloadseite öffnen',
+  updateManualDetail: 'Laden Sie das Installationsprogramm für diesen Mac von GitHub herunter, beenden Sie die App und installieren Sie es manuell.',
+  updateOpenReleaseFailed: 'Die Downloadseite konnte nicht geöffnet werden. Prüfen Sie den Standardbrowser und versuchen Sie es erneut.',
+  updateManualCurrent: 'Für diesen Mac und Updatekanal ist kein neueres Installationsprogramm auf GitHub veröffentlicht.',
   cliCommandMenu: 'dsh-Befehl verwalten…',
   cliCommandTitle: 'dsh-Befehl verwalten',
   cliCommandLocation: 'Desktop-Befehl: {path}',
@@ -1161,6 +1185,10 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  updateOpenReleasePage: 'Открыть страницу GitHub',
+  updateManualDetail: 'Скачайте установщик для этого Mac с GitHub, закройте приложение и установите его вручную.',
+  updateOpenReleaseFailed: 'Не удалось открыть страницу. Проверьте браузер по умолчанию и повторите попытку.',
+  updateManualCurrent: 'На GitHub нет более нового установщика для этого Mac и канала обновлений.',
   cliCommandMenu: 'Управление командой dsh…',
   cliCommandTitle: 'Управление командой dsh',
   cliCommandLocation: 'Команда Desktop: {path}',
@@ -1354,6 +1382,10 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  updateOpenReleasePage: 'Abrir página no GitHub',
+  updateManualDetail: 'Baixe o instalador para este Mac no GitHub, feche o aplicativo e instale-o manualmente.',
+  updateOpenReleaseFailed: 'Não foi possível abrir a página. Verifique o navegador padrão e tente novamente.',
+  updateManualCurrent: 'Não há um instalador mais recente no GitHub para este Mac e canal de atualização.',
   cliCommandMenu: 'Gerenciar comando dsh…',
   cliCommandTitle: 'Gerenciar comando dsh',
   cliCommandLocation: 'Comando da área de trabalho: {path}',
@@ -1603,4 +1635,20 @@ export function desktopUpdateReadyConfirmation(
     message: formatDesktopMessage(messages.updateDownloadedTitle, { version }),
     detail: platform === 'win32' ? messages.updateDownloadedDetailWindows : messages.updateDownloadedDetail,
   }
+}
+
+/**
+ * Present a metadata-only release without authorizing an in-app download or installation.
+ * @param messages - Selected Desktop dictionary.
+ * @param version - Checked GitHub release version.
+ * @returns Localized download-page confirmation; dismissal always cancels.
+ */
+export function desktopManualUpdateConfirmation(messages: DesktopMessages, version: string): {
+  message: string
+  detail: string
+  buttons: string[]
+  cancelId: number
+} {
+  return { message: formatDesktopMessage(messages.updateAvailable, { version }), detail: messages.updateManualDetail,
+    buttons: [messages.updateOpenReleasePage, messages.updateLater], cancelId: 1 }
 }

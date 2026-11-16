@@ -167,6 +167,8 @@ Run `pnpm install --frozen-lockfile`, then `pnpm run package:desktop:win:x64:uns
 
 ## Local macOS DMG without release signing
 
+The Desktop [package manifest](../package.json) sets `dshDesktopManualUpdateRepository` to the public GitHub `owner/repository` used by local unsigned macOS builds. This fork selects `Rqjqaz1122/deepseek-harness`. Change that value before packaging to use another repository, or set it to `null` to omit manual checks. Packaging validates the identifier and seals it into the installed manifest; signed packages explicitly clear it. Changing Git remotes does not change an already built application. Publish the resulting DMG as a GitHub Release asset under a higher semantic-version tag to make it discoverable; the checker’s [version and asset requirements](../README.md#updates) apply. This configuration does not create or upload Releases.
+
 After `pnpm install`, run one command from the repository root. No `.env.macos`, Apple account, certificate, or update service configuration is required:
 
 ```sh

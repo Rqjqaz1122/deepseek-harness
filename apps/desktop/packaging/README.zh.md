@@ -167,6 +167,8 @@ pnpm run package:desktop:win:x64:unsigned
 
 ## 无发布签名的本地 macOS DMG
 
+Desktop 的[包清单](../package.json) 以 `dshDesktopManualUpdateRepository` 设置本地未签名 macOS 包使用的公开 GitHub `owner/repository`。此分支选择 `Rqjqaz1122/deepseek-harness`。打包前可修改该值以使用其他仓库，或设为 `null` 省略手动更新检查。打包器验证标识并写入已安装清单；签名包明确清除此设置。更改 Git 远程地址不会改变已经构建的应用。将生成的 DMG 作为 GitHub Release 附件发布到更高语义化版本标签后，应用才能发现它；须满足检查器的[版本及附件要求](../README.zh.md#updates)。此配置不创建或上传 Release。
+
 执行 `pnpm install` 后，在仓库根目录运行一条命令即可，无需 `.env.macos`、Apple 账号、证书或更新服务配置：
 
 ```sh

@@ -1,4 +1,4 @@
-/** User-authorized downloads and separate installation of one version-bound Desktop release. */
+/** User-authorized native installation or a release page for one checked Desktop version. */
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -14,10 +14,28 @@ import { discardDesktopUpdate } from './updates/electron-updater/discard.ts'
 
 const { autoUpdater } = electronUpdater
 
+/** Metadata-only updates; the main process owns both discovery and user-authorized page opening. */
+export interface DesktopManualUpdateSource {
+  /**
+   * Resolve published metadata without downloading an installer.
+   * @param channel - Selected release eligibility policy.
+   * @param signal - Aborted when the channel changes or the coordinator is disposed.
+   * @returns A checked release, or undefined when none qualifies; failures reject.
+   */
+  check(channel: DesktopUpdateChannel, signal: AbortSignal): Promise<{ version: string; pageUrl: string } | undefined>
+  /**
+   * Open the page only after confirmation.
+   * @param url - URL retained from the checked release, never supplied by the renderer.
+   * @returns Completion of browser handoff; failures reject.
+   */
+  openPage(url: string): Promise<void>
+}
+
 /** Owns one updater target until its download and installation settle. */
 export class DesktopUpdateCoordinator {
   private current: DesktopUpdateState = { phase: 'idle' }
-  private release: { kind: 'none' } | { kind: 'checked' | 'downloaded' | 'handed-off'; version: string } = { kind: 'none' }
+  private release: { kind: 'none' } | { kind: 'checked' | 'downloaded' | 'handed-off'; version: string }
+    | { kind: 'manual'; version: string; pageUrl: string } = { kind: 'none' }
   private disposed = false
   private generation = 0
   private switching = 0
@@ -28,6 +46,7 @@ export class DesktopUpdateCoordinator {
   private checkOperation: Promise<DesktopUpdateState> | undefined
   private downloadOperation: Promise<DesktopUpdateState> | undefined
   private installOperation: Promise<DesktopUpdateState> | undefined
+  private manualCheck: AbortController | undefined
 
   private readonly onProgress = (progress: ProgressInfo): void => {
     if (this.downloadGeneration !== this.generation || this.downloadOperation === undefined || this.downloaded) return
@@ -56,16 +75,18 @@ export class DesktopUpdateCoordinator {
    * @param channel - Installed package channel; omitted test/local callers retain nightly.
    * @param discard - Clears settled library targets and platform resources before another channel is used.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
+   * @param manualSource - Optional metadata-only source; disables native download and installation.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
     private readonly beforeRestart: () => Promise<boolean>,
     private readonly updater: AppUpdater = autoUpdater,
-    private readonly enabled: () => boolean = () => app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')),
+    private readonly enabled: () => boolean = () => app.isPackaged && (this.manualSource !== undefined || existsSync(join(process.resourcesPath, 'app-update.yml'))),
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
     private channel: DesktopUpdateChannel = 'nightly',
     private readonly discard: (updater: AppUpdater) => Promise<void> = discardDesktopUpdate,
+    private readonly manualSource?: DesktopManualUpdateSource,
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
@@ -95,6 +116,24 @@ export class DesktopUpdateCoordinator {
 
   /** Revision captured by confirmations so channel changes invalidate old user actions. */
   get revision(): number { return this.generation }
+
+  /** Whether a checked update opens a release page for manual installation. */
+  get manualInstallation(): boolean { return this.manualSource !== undefined }
+
+  /**
+   * Open the retained release page after confirmation; stale confirmations have no effect.
+   * @param version - Version displayed in the confirmation.
+   * @param revision - Channel revision displayed in the confirmation.
+   * @returns Whether the page was opened; browser failures reject without starting an installation.
+   */
+  async openReleasePage(version: string, revision: number): Promise<boolean> {
+    this.assertLive()
+    if (this.manualSource === undefined) throw new Error('desktop update: no manual update source')
+    if (revision !== this.generation || this.switching > 0 || this.configurationError !== undefined
+      || this.current.phase !== 'available' || this.release.kind !== 'manual' || this.release.version !== version) return false
+    await this.manualSource.openPage(this.release.pageUrl)
+    return true
+  }
 
   /**
    * Suspend ordinary updates when settings or previous-target cleanup are invalid.
@@ -127,11 +166,12 @@ export class DesktopUpdateCoordinator {
       await persist()
       this.generation++
       this.cancellation?.cancel()
+      this.manualCheck?.abort()
       await Promise.allSettled([this.checkOperation, this.downloadOperation])
       this.assertLive()
       this.release = { kind: 'none' }
       this.cancellation = undefined
-      try { await this.discard(this.updater) } catch (error) {
+      try { if (this.manualSource === undefined) await this.discard(this.updater) } catch (error) {
         this.suspendConfiguration('desktop update: could not retire the previous update', 'cleanup')
         throw error
       }
@@ -171,6 +211,7 @@ export class DesktopUpdateCoordinator {
    */
   async download(version: string, revision = this.generation): Promise<DesktopUpdateState> {
     this.assertLive()
+    if (this.manualSource !== undefined) throw new Error('desktop update: use the release page for manual installation')
     if (revision !== this.generation || this.configurationError !== undefined || this.switching > 0) return this.current
     if (this.downloaded || this.installOperation !== undefined) return this.current
     const generation = this.generation
@@ -206,6 +247,7 @@ export class DesktopUpdateCoordinator {
    */
   async install(version: string, revision = this.generation): Promise<DesktopUpdateState> {
     this.assertLive()
+    if (this.manualSource !== undefined) throw new Error('desktop update: use the release page for manual installation')
     if (revision !== this.generation) return this.current
     if (this.configurationError !== undefined || this.switching > 0) throw new Error('desktop update: channel selection is not ready')
     if (!this.downloaded || this.downloadOperation !== undefined || version !== this.candidate) throw new Error('desktop update: confirmed target is not ready')
@@ -228,6 +270,7 @@ export class DesktopUpdateCoordinator {
   /** Remove owned listeners and prevent pending library operations from publishing into closed UI. */
   dispose(): void {
     this.disposed = true
+    this.manualCheck?.abort()
     this.updater.off('download-progress', this.onProgress)
     this.updater.off('update-downloaded', this.onDownloaded)
     // Pending updater promises can still emit EventEmitter errors during shutdown.
@@ -270,6 +313,14 @@ export class DesktopUpdateCoordinator {
     try {
       this.assertLive()
       if (!this.enabled()) throw new Error('desktop update: this application has no packaged update source')
+      if (this.manualSource !== undefined) {
+        this.manualCheck = new AbortController()
+        const release = await this.manualSource.check(this.channel, this.manualCheck.signal)
+        if (generation !== this.generation || this.disposed) return this.current
+        if (release !== undefined && valid(release.version) === null) throw new Error('desktop update: release version is invalid')
+        this.release = release !== undefined && gt(release.version, this.currentVersion()) ? { kind: 'manual', ...release } : { kind: 'none' }
+        return this.setState(this.release.kind === 'none' ? { phase: 'idle' } : { phase: 'available', version: this.release.version })
+      }
       const result = await this.updater.checkForUpdates()
       if (generation !== this.generation || this.disposed) return this.current
       if (result === null) throw new Error('desktop update: no check result was returned')

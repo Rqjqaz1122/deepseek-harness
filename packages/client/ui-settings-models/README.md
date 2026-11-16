@@ -81,6 +81,8 @@ The section declares two seats for plugins distributed outside this repository, 
 
 The Models page includes **DeepSeek Account** (`deepseek-account`, **DeepSeek 账号** in Chinese). The row shows a **Signed in** status and offers no editor: the account listing supplies its models, and [model overrides](../../llm/llm-deepseek-account/README.md#use-this-package) live in `cordis.patch.yml`. The account row is hidden when its available model catalog is empty, including before sign-in and after sign-out; it returns when account models become available.
 
+Anthropic provider forms expose **Request mode** and a validated JSON editor for optional non-secret client headers. The client preset supplies version headers and session metadata without requiring extra fields. Both the catalog-provider editor and custom Anthropic creation form preserve drafts when switching request modes; malformed active header JSON blocks saving. The [model configuration guide](../../../docs/user/guide/providers.md) owns the user workflow, and the [adapter reference](../../llm/llm-pi-ai/README.md#client-compatibility-requests) owns request behavior.
+
 -----
 
 <a id="understand-the-implementation"></a>

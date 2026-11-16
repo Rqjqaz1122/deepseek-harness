@@ -24,6 +24,8 @@ A saved credential displays a masked preview in the input and a green hint that 
 
 An editable, nonempty key draft has an eye button. Select **Show secret** to check what you typed, and **Hide secret** to mask it again. Changing the input masks it again. Native password fields do not offer cut; select the draft and press Backspace to erase it, or reveal it before cutting. Stored credentials remain write-only.
 
+For an Anthropic provider, **Request mode** offers **Standard API** and **Client compatibility**. Client compatibility sends version headers and session metadata automatically; additional non-secret JSON headers are optional, so you can keep `{}` and save. The adapter reference explains [header precedence and limitations](../../../packages/llm/llm-pi-ai/README.md#client-compatibility-requests). This configures DSH requests; it does not launch Claude Code.
+
 ## Add a custom model API
 
 Switch the card to **Custom model API** for a relay, a company gateway, a self-hosted server, or any provider absent from the installed catalog. Supply a lowercase Provider ID, base URL, API protocol, credential, and at least one model. The **API protocol** must be the one your gateway speaks, and the picker offers four: OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and Gemini API, stored in the active profile's `cordis.patch.yml` as `openai-completions`, `openai-responses`, `anthropic-messages`, and `google-generative-ai`. A Gemini API base URL includes the API version, such as `https://gateway.example/v1beta`. A provider speaks one protocol, so a gateway that serves two needs two providers.
