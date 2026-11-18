@@ -168,7 +168,7 @@ pnpm run package:desktop:win:x64:unsigned
 
 ## GitHub Release 自动打包
 
-公开仓库使用 Pages 更新清单时，设置仓库变量 `DESKTOP_UPDATE_PAGES=true`，再在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。该变量将仓库默认的 `github.io` 站点保留给更新清单；启用期间，文档发布模式拒绝部署。不支持自定义 Pages 域名。[共用 Pages 工作流](../../../.github/workflows/docs-pages.yml) 提供 `desktop-updates` 模式，用于首次发布以及 Release 编辑、资产替换或删除后的清单刷新。此模式仅在临时工具目录安装 `semver` 和 `zod`，并禁用生命周期脚本；不安装仓库开发工具。
+公开仓库使用 Pages 更新清单时，设置仓库变量 `DESKTOP_UPDATE_PAGES=true`，再在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。在 **Settings → Environments → github-pages** 中允许 `desktop-v*` 标签模式及首次手动部署使用的确切分支。该变量将仓库默认的 `github.io` 站点保留给更新清单；启用期间，文档发布模式拒绝部署。不支持自定义 Pages 域名。[共用 Pages 工作流](../../../.github/workflows/docs-pages.yml) 提供 `desktop-updates` 模式，用于首次发布以及 Release 编辑、资产替换或删除后的清单刷新。此模式仅在临时工具目录安装 `semver` 和 `zod`，并禁用生命周期脚本；不安装仓库开发工具。
 
 安装包上传成功后，Release 工作流调用 Pages 工作流。它使用工作流临时 GitHub Token 读取全部分页 Release，排除草稿及未完成的安装包，再发布 `updates/stable.json` 和 `updates/nightly.json`。Stable 排除预发布；Nightly 包含正式版及预发布。每个兼容安装包必须带 GitHub SHA-256 摘要；缺失时发布失败，保留此前已部署的站点。两个文件通过同一个 Pages 并发组一起部署。对于当前配置的仓库，检查[开发版清单](https://rqjqaz1122.github.io/deepseek-harness/updates/nightly.json) 已包含新上传的版本；客户端无需 GitHub Token。仍查询 REST API 的旧客户端需要先手动升级一次，才能使用 Pages 清单。
 
