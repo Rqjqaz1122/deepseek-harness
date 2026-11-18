@@ -124,7 +124,7 @@ describe('the search bar', () => {
     await shown(h)
     expect(h.view.queryByRole('button', { name: zh['search.clear'] })).toBeNull()
     await type(h, ' Ab ', ['src/tab.ts', 'lib/AB/', 'lib/AB/x.ts'])
-    expect(requests(h)).toEqual([{ query: 'Ab', excludedPaths: enabledPaths(defaultRules()), includeHidden: false, respectGitignore: true }])
+    expect(requests(h)).toEqual([{ root: ROOT, query: 'Ab', excludedPaths: enabledPaths(defaultRules()), includeHidden: false, respectGitignore: true }])
     expect(status(h)).toBe(t('search.results', { count: '3' }))
     expect(paths(h)).toEqual([`${ROOT}/lib`, `${ROOT}/lib/AB`, `${ROOT}/lib/AB/x.ts`, `${ROOT}/src`, `${ROOT}/src/tab.ts`])
     expect([...body(h).querySelectorAll('mark')].map(mark => mark.textContent)).toEqual(['AB', 'ab'])
@@ -377,7 +377,7 @@ describe('the settings panel', () => {
     expect(stored(h).rules.find(rule => rule.path === 'dist')?.enabled).toBe(false)
     expect(document.activeElement).toBe(settingsButton(h))
     expect(requests(h)).toEqual([requests(h)[0], {
-      query: 'a', excludedPaths: enabledPaths(defaultRules()).filter(path => path !== 'dist'), includeHidden: false, respectGitignore: true,
+      root: ROOT, query: 'a', excludedPaths: enabledPaths(defaultRules()).filter(path => path !== 'dist'), includeHidden: false, respectGitignore: true,
     }])
 
     toggle()

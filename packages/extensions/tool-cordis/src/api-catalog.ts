@@ -3125,6 +3125,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{AggregateError} naming each session whose flush failed; the remaining handles still flush.'],
       },
       {
+        signature: 'abstract delete(id: SessionId): Promise<boolean>',
+        description: 'Erase all stored generations of an inactive Session. Callers must first release its live Agent; an active writer, including another process, refuses deletion. Read handles are closed. Missing ids resolve as a no-op. Project files and shared attachment objects are outside this operation. A failure may leave partial cleanup; retry this operation to finish.',
+        parameters: [{ name: 'id', description: 'stored Session identity.' }],
+        returns: 'whether a stored log was removed.',
+      },
+      {
         signature: 'abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined>',
         description: 'Observe one stored session without reading its event log or taking ownership.\n\nThe snapshot\'s `revision` is an opaque change token comparable only against revisions from the same service instance and session id: equal revisions may be treated as an unchanged log; unequal revisions promise nothing. Write-ownership churn does not change a revision. It exists for derived read-model caches keyed off `stat`/`list`; it plays no part in open, read, or resume.',
         parameters: [{ name: 'id', description: 'the stored session to observe.' }, { name: 'options', description: 'optional cancellation.' }],
@@ -4797,10 +4803,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete resulting archive set.',
       },
       {
+        signature: '@Remote(\'deleteSession\') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue>',
+        description: 'Permanently delete an inactive Session through the shared domain entry.',
+        parameters: [{ name: 'request', description: 'Session identity to erase.' }],
+        returns: 'confirmation after all deletion steps complete.',
+      },
+      {
         signature: '@Remote(\'unarchiveSession\') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>',
-        description: 'Restore one archived Session to Workspace grouping surfaces.',
-        parameters: [{ name: 'request', description: 'Session identity to unarchive.' }],
-        returns: 'the complete resulting archive set.',
+        description: 'Restore one archived Session.',
+        parameters: [{ name: 'request', description: 'Session to unarchive.' }],
+        returns: 'the resulting archive set.',
       },
       {
         signature: '@Remote(\'pinSession\') pinSession(request: WorkspacePinSessionRequest): Promise<WorkspacePinValue>',
@@ -4873,9 +4885,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Durable workspace registry. Startup waits for `sessionPersistence`, builds one canonical-cwd header index, and completes the one-time history bootstrap before the service becomes active. The persistence dependency is mandatory so an unavailable peer can never be mistaken for an empty history and commit the initialized marker.',
     methods: [
       {
-        signature: 'async create(path: string, title?: string): Promise<Workspace>',
-        description: 'Create or reuse a workspace for an existing directory. The fully qualified path is canonicalized through `fs.realpath`; a relative, nonexistent, or non-directory path rejects. Repeated calls for the same canonical path return the existing entity without changing its title. A newly created workspace is prepended to the durable registry order. Different canonical paths may share a display title.',
-        parameters: [{ name: 'path', description: 'Existing directory to own, in a fully qualified path spelling.' }, { name: 'title', description: 'Display title used only when a new record is created.' }],
+        signature: 'async create(path: string, title?: string, additionalPaths?: readonly string[]): Promise<Workspace>',
+        description: 'Create or reuse a workspace for an existing directory. The fully qualified path is canonicalized through `fs.realpath`; a relative, nonexistent, or non-directory path rejects. Repeated calls for the same canonical path return the existing entity without changing its title; an explicitly different folder set rejects. A newly created workspace is prepended to the durable registry order. Different canonical paths may share a display title.',
+        parameters: [{ name: 'path', description: 'Existing directory to own, in a fully qualified path spelling.' }, { name: 'title', description: 'Display title used only when a new record is created.' }, { name: 'additionalPaths', description: 'Additional existing directories, canonicalized and deduplicated before any write.' }],
         returns: 'the existing or newly durable workspace.',
       },
       {
@@ -4913,6 +4925,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Archive one session durably. The session must exist (live or in session persistence); its workspace accounting — or lack of one — is irrelevant. Without `stopActivity` the session must also be inactive: the `workspace/session-activity` waterfall is asked once, and any reported activity rejects with WorkspaceActiveSessionError before anything is written. With `stopActivity` the archive is written without an activity check, and the `workspace/session-stop` providers are then asked to stop the session\'s work: the durable archive set is what a provider\'s `agent/pre-step` gate reads, so every wake the stops induce is already blocked. Archiving drops the session\'s pin in the same durable write (pinning and archival are mutually exclusive). An already archived id resolves without writing, asking, or stopping.',
         parameters: [{ name: 'sessionId', description: 'The session to archive.' }, { name: 'options', description: 'Whether running work is stopped instead of refusing.' }],
         returns: 'resolution after durability, any stop requests, and follow-up admission.',
+      },
+      {
+        signature: 'isSessionDeleting(sessionId: SessionId): boolean',
+        description: 'Test whether permanent deletion currently blocks activation of a Session.',
+        parameters: [{ name: 'sessionId', description: 'Session to test.' }],
+        returns: 'whether deletion is in progress.',
+      },
+      {
+        signature: 'deleteSession(sessionId: SessionId): Promise<void>',
+        description: 'Permanently delete one inactive Session, releasing its runtime and removing every stored generation, workspace membership, pin, and archive reference. Repeated calls finish any remaining cleanup. Running work refuses before mutation. Shared attachments, forked Sessions, and project files remain. Providers release runtimes through workspace/session-deleting and remove derived data through session/deleting. Cleanup failures reject and may leave partial effects; retry deletion to finish.',
+        parameters: [{ name: 'sessionId', description: 'Session identity; missing Sessions are safe to delete again.' }],
+        returns: 'completion after storage and registry cleanup.',
       },
       {
         signature: 'unarchiveSession(sessionId: SessionId): Promise<void>',
@@ -5088,6 +5112,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'A Session became visible or its Agent was created or disposed.',
     description: 'A Session became visible or its Agent was created or disposed. Consumers upsert the summary and replace its current running and availability state.',
     parameters: [{ name: 'summary', description: 'current list row for the Session.' }],
+  },
+  {
+    name: 'api-session/deleted',
+    mode: 'emit',
+    signature: '\'api-session/deleted\'(sessionId: SessionId): void',
+    summary: 'A Session\'s durable history was permanently deleted.',
+    description: 'A Session\'s durable history was permanently deleted.',
+    parameters: [{ name: 'sessionId', description: 'removed Session identity.' }],
   },
   {
     name: 'api-session/error',
@@ -5466,6 +5498,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'session', description: 'the session just entered and announced.' }],
   },
   {
+    name: 'session/deleted',
+    mode: 'parallel',
+    signature: '\'session/deleted\'(id: SessionId): Promise<void> | void',
+    summary: 'A stored Session was permanently removed, including all log generations.',
+    description: 'A stored Session was permanently removed, including all log generations.',
+    parameters: [{ name: 'id', description: 'removed Session identity.' }],
+  },
+  {
+    name: 'session/deleting',
+    mode: 'parallel',
+    signature: '\'session/deleting\'(id: SessionId): Promise<void> | void',
+    summary: 'Remove derived Session data before its stored log is erased.',
+    description: 'Remove derived Session data before its stored log is erased. Listeners must finish queued writes and prevent retained observations from restoring caches. Failure aborts log removal; callers may retry the deletion.',
+    parameters: [{ name: 'id', description: 'Session whose write ownership is reserved for deletion.' }],
+  },
+  {
     name: 'session/disposed',
     mode: 'emit',
     signature: '\'session/disposed\'(this: Scoped<Session>, session: Session): void',
@@ -5696,6 +5744,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Admit optional follow-up work after durable archival and any stop requests.',
     description: 'Admit optional follow-up work after durable archival and any stop requests. Dispatched inside the registry\'s write queue: a listener registers its work and returns, and runs the work and any unbounded I/O afterwards. Listener failures are logged without undoing archival. Listeners own and drain their background work.',
     parameters: [{ name: 'request', description: 'newly archived Session; repeated archive requests do not dispatch.' }],
+  },
+  {
+    name: 'workspace/session-deleting',
+    mode: 'parallel',
+    signature: '\'workspace/session-deleting\'(request: SessionActivityRequest): Promise<void> | void',
+    summary: 'Release the inactive Session\'s live runtime before erasing its stored log.',
+    description: 'Release the inactive Session\'s live runtime before erasing its stored log.',
+    parameters: [{ name: 'request', description: 'Session blocked against new activation during deletion.' }],
   },
   {
     name: 'workspace/session-stop',
@@ -10687,7 +10743,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly additionalPaths: readonly string[];\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',
@@ -10719,7 +10775,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceCreateRequest',
-    declaration: 'export interface WorkspaceCreateRequest {\n    readonly path: string;\n}',
+    declaration: 'export interface WorkspaceCreateRequest {\n    readonly title?: string;\n    readonly path: string;\n    readonly additionalPaths?: readonly string[];\n}',
   },
   {
     name: 'WorkspaceCreateValue',
@@ -10728,6 +10784,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceDeleteRequest',
     declaration: 'export interface WorkspaceDeleteRequest {\n    readonly workspaceId: WorkspaceId;\n}',
+  },
+  {
+    name: 'WorkspaceDeleteSessionRequest',
+    declaration: 'export interface WorkspaceDeleteSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'WorkspaceDeleteSessionValue',
+    declaration: 'export interface WorkspaceDeleteSessionValue {\n    readonly deleted: true;\n}',
   },
   {
     name: 'WorkspaceDeleteValue',
@@ -10763,7 +10827,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceFileScope',
-    declaration: 'export interface WorkspaceFileScope {\n    readonly sessionId: SessionId;\n    readonly workspaceRoot: string;\n}',
+    declaration: 'export interface WorkspaceFileScope {\n    readonly sessionId: SessionId;\n    readonly workspaceRoot: string;\n    readonly additionalPaths?: readonly string[];\n}',
   },
   {
     name: 'WorkspaceFileSearchMatch',
@@ -10771,7 +10835,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceFileSearchRequest',
-    declaration: 'export interface WorkspaceFileSearchRequest {\n    readonly query: string;\n    readonly excludedPaths: readonly string[];\n    readonly includeHidden: boolean;\n    readonly respectGitignore: boolean;\n}',
+    declaration: 'export interface WorkspaceFileSearchRequest {\n    readonly root?: string;\n    readonly query: string;\n    readonly excludedPaths: readonly string[];\n    readonly includeHidden: boolean;\n    readonly respectGitignore: boolean;\n}',
   },
   {
     name: 'WorkspaceFileSearchResult',
@@ -10835,7 +10899,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly additionalPaths?: readonly string[];\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
   {
     name: 'WorktreeCleanup',

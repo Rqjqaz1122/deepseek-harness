@@ -176,6 +176,7 @@ class FakeSessions implements ISessions {
 }
 
 class FakeWorkspaces implements IWorkspaces {
+  readonly deleteSession = vi.fn<IWorkspaces['deleteSession']>(async () => {})
   readonly initializeDefault = vi.fn<IWorkspaces['initializeDefault']>(async () => undefined)
   readonly list: MutableSource<WorkspaceSnapshot>
   readonly archiveCalls: SessionId[] = []

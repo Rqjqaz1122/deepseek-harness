@@ -13,6 +13,7 @@
  * its inputs: the Remote listing and watch bindings, and `canOpenOf`; the
  * search's binding lives in `search-workspace.ts`.
  */
+import type { WorkspaceSource } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { PaneId, TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
@@ -273,6 +274,9 @@ export interface FilesInjected {
     readonly canOpen: HostObservable<(address: string) => boolean>
   }
   readonly keyedHooks: {
+    /** Registered Workspace folders, selected by the Session's primary directory. */
+    readonly workspaceFolders: (cwd: string) => HostObservable<readonly string[]>
+
     /** The measured width of the row a pane's navigator is laid out in, in CSS pixels, keyed by pane id; `undefined` until measured. */
     readonly rowWidth: (paneId: string) => HostObservable<number | undefined>
     /** A workspace's search preferences, keyed by the Session's working directory; shared by every Session rooted there. */
@@ -390,6 +394,7 @@ export type PlaceFace = (tabId: TabId, face: FilesInjected) => () => void
  * @param navigationOf - the attached tab's navigation; subscriptions end with this plugin or their disposer.
  * @param search - the workspace search.
  * @param preferences - every workspace's search preferences, shared by every Session.
+ * @param workspaces - Optional live Workspace projection supplying the registered folders.
  * @returns the face factory: session, its store instance, and where to place the face beside tabs in, face out.
  */
 export function filesFace(
@@ -399,12 +404,14 @@ export function filesFace(
   navigationOf: (sessionId: SessionId, tabId: TabId) => HostObservable<SidebarRightTabNavigation>,
   search: SearchWorkspace,
   preferences: WorkspaceSearchPreferenceBook,
+  workspaces?: WorkspaceSource,
 ): (
   sessionId: SessionId,
   store: Pick<FilesStoreInstance, 'actions' | 'getSnapshot' | 'subscribe'>,
   place: PlaceFace,
 ) => FilesInjected {
   return (sessionId, store, place): FilesInjected => {
+    const folderSources = new Map<string, HostObservable<readonly string[]>>()
     const { actions } = store
     const panes = new Map<PaneId, PaneRecord>()
     const record = (paneId: PaneId): PaneRecord => {
@@ -529,7 +536,7 @@ export function filesFace(
         if (pane.drawn !== undefined) pane.drawn.body.scrollTop = 0
         actions.searched(paneId, result)
       }
-      search(sessionId, { query, excludedPaths, includeHidden: showHidden, respectGitignore }, controller.signal).then((answer) => {
+      search(sessionId, { query, excludedPaths, includeHidden: showHidden, respectGitignore, root: cwd }, controller.signal).then((answer) => {
         settle(answer.ok
           ? {
             kind: 'found', query, tree: buildSearchTree(cwd, answer.value.matches), count: answer.value.matches.length,
@@ -948,7 +955,29 @@ export function filesFace(
         drop(paneId)
       },
       hooks: { canOpen },
-      keyedHooks: { rowWidth: paneId => record(paneId as PaneId).width, searchPreferences: cwd => preferences.source(cwd) },
+      keyedHooks: { workspaceFolders: cwd => {
+        const held = folderSources.get(cwd)
+        if (held !== undefined) return held
+        const read = (): readonly string[] => {
+          const workspace = workspaces?.getSnapshot().items.find(item => item.path === cwd)
+          return workspace === undefined ? [cwd] : [workspace.path, ...(workspace.additionalPaths ?? [])]
+        }
+        let folders = read()
+        const snapshot = (): readonly string[] => {
+          const next = read()
+          if (next.length !== folders.length || next.some((path, i) => path !== folders[i])) folders = next
+          return folders
+        }
+        const source: HostObservable<readonly string[]> = {
+          getSnapshot: snapshot,
+          subscribe: listener => workspaces?.subscribe(() => {
+            const previous = folders
+            if (snapshot() !== previous) listener()
+          }) ?? (() => {}),
+        }
+        folderSources.set(cwd, source)
+        return source
+      }, rowWidth: paneId => record(paneId as PaneId).width, searchPreferences: cwd => preferences.source(cwd) },
     }
     return face
   }

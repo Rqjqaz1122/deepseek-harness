@@ -49,6 +49,9 @@
     },
     {
       "path": "../ui-context-menu"
+    },
+    {
+      "path": "../../api/workspace-controller/tsconfig.client.json"
     }
   ]
 }

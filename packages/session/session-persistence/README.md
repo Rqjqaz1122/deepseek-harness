@@ -25,6 +25,8 @@ This package lets applications persist and resume session event logs through a b
 <a id="use-this-package"></a>
 ## Use this package
 
+`delete(id)` erases every stored generation after the caller releases the live runtime. Active local or foreign writers refuse deletion; local read handles close. Missing ids return `false`; successful removal returns `true`. Providers await `session/deleting` before removing logs and `session/deleted` afterwards so derived-data owners can finish cleanup. Failures may leave partial effects; retry deletion. Product callers use [WorkspaceRegistry.deleteSession](../../workspace/workspace/README.md) for activity admission and registry cleanup.
+
 Mount one persistence backend to make sessions durable. The backend registers itself as `ctx.sessionPersistence` and routes every published session's live events into that session's active write handle; agent-loop — the production publication point for sessions — acquires each session's write handle before publication, so nothing else in the composition changes.
 
 ### Choosing a backend
@@ -33,7 +35,7 @@ The seam ships the [JSONL](../session-persistence-jsonl/README.md) backend: one 
 
 ### What the service provides
 
-With a backend mounted, five service methods address stored sessions:
+With a backend mounted, the service methods address stored sessions:
 
 ```text
 const handle = await ctx.sessionPersistence.create(header)     // store a new session, take write ownership

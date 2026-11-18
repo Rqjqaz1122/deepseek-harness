@@ -129,6 +129,7 @@ class CatalogWorkflowEngine extends WorkflowEngine {
 
 /** Schema collection needs the persistence service but must never access stored Sessions. */
 class CatalogSessionPersistence extends SessionPersistence {
+  delete = unavailableCatalogPersistence
   create = unavailableCatalogPersistence
   open = unavailableCatalogPersistence
   flush = unavailableCatalogPersistence

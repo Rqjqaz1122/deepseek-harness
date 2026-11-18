@@ -1,4 +1,6 @@
 import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { SessionDeleteDialog } from './session-actions/DeleteSession.tsx'
+import type { SessionDeleteInjected, SessionDeleteRequest } from './contract/slots.ts'
 import { SessionMenu } from './session-actions/SessionMenu.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 /**
@@ -196,6 +198,15 @@ export function apply(ctx: Context): void {
   // writes through its own injected callback and the surface reads through
   // its bound hook.
   const renameRequest = derive(shortcutControls.state, state => state.renameTarget)
+  const deleteRequest = createSnapshotStore<SessionDeleteRequest | null>(null)
+  const requestSessionDelete = (sessionId: SessionId, displayTitle: string): void => {
+    deleteRequest.set({ sessionId, displayTitle })
+  }
+  const deleteInjected = (): SessionDeleteInjected => ({
+    hooks: { deleteRequest },
+    settleSessionDelete: () => { deleteRequest.set(null) },
+    deleteSession: sessionId => uiWorkspace.deleteSession(sessionId),
+  })
   const archiveRequest = createSnapshotStore<SessionArchiveConfirmRequest | null>(null)
   const requestSessionRename = shortcutControls.rename
   const unarchiveSession = (sessionId: SessionId): void => {
@@ -384,7 +395,7 @@ export function apply(ctx: Context): void {
     } },
   }, SessionMenu))
   registerSessionMenus(ctx, {
-    ...pinInjected(), ...archiveInjected(), ...renameInjected(), ...forkInjected(), ...sessionIdInjected(),
+    ...pinInjected(), ...archiveInjected(), ...renameInjected(), ...forkInjected(), ...sessionIdInjected(), requestSessionDelete,
   })
   ctx.slots.inject('sidebar.workspaces.session.row.action', function* () {
     yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'archive', order: 100, locale: NS, inject: archiveInjected }, ArchiveSessionRowButton)
@@ -396,6 +407,9 @@ export function apply(ctx: Context): void {
     yield ctx.slots.register({
       name: 'shell.overlay', id: 'workspace.session-rename', locale: NS, inject: renameDialogInjected,
     }, SessionRenameDialog)
+    yield ctx.slots.register({
+      name: 'shell.overlay', id: 'workspace.session-delete', locale: NS, inject: deleteInjected,
+    }, SessionDeleteDialog)
     yield ctx.slots.register({
       name: 'shell.overlay', id: 'workspace.session-archive', locale: NS, inject: archiveConfirmInjected,
     }, SessionArchiveConfirmDialog)

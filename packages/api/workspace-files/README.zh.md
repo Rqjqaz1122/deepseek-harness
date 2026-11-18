@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+目录列表和监视允许访问与 Session 主目录匹配的已注册 Workspace 中的所有文件夹，但不会因此开放它们的公共父目录。规范路径包含检查仍会拒绝逃出所有已注册目录的符号链接。`search` 接受可选 `root`，其值必须与某个已注册目录完全相同；省略时选择主目录，结果路径仍相对于所选目录。文件预览读取保持原有的文件系统读取权限。
+
 把本包与 `dsh-fs`、`dsh-sandbox-policy`、Session store 和 Typert Gateway 一起挂载；bundle 把它紧随 Session Controller 之后挂载。每个方法都在线路上携带 Session 身份，Client 调用 `remote.workspaceFiles.read(sessionId, path, range, signal)`、`stat(sessionId, path, signal)`、`readBytes(sessionId, path, options, signal)`、`list(sessionId, path, signal)`、`search(sessionId, request, signal)` 或 `changes(sessionId, path, signal)`，从不自己指定根。Host 读取 live Session header，cold Session 则使用持久层 `stat`；它不会激活 Agent、读取事件正文或借用父 Session 的根。live 读取不要求挂载 Session persistence；未挂载时 cold Session 无法解析，Gateway 返回 `gateway/lookup-not-found`。
 
 | 方法 | 返回 | 用途 |

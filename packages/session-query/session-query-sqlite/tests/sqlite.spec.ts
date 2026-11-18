@@ -129,6 +129,7 @@ class TestHandle implements SessionHandle {
 }
 
 class TestPersistence extends SessionPersistence {
+  async delete(_id: SessionId): Promise<boolean> { throw new Error('deletion is not implemented by this test fixture') }
   static entries = new Map<SessionIdType, { meta: SessionHeader; events: SessionEvent[] }>()
   static revisions = new Map<SessionIdType, number>()
   static nextRevision = 0
@@ -1877,4 +1878,29 @@ describe('SQLite schema, cancellation, and real persistence integration', () => 
     await searchB.dispose()
     await persistenceB.dispose()
   })
+})
+
+it('removes permanent deletion from the durable full-text index before another search', async () => {
+  const path = await temporaryPath('permanent-delete.db')
+  const ctx = await liveContext({ path })
+  try {
+    await ctx.plugin(JsonlSessionPersistence, { root: join(dirname(path), 'logs'), compression: 'none' })
+    const target = header('delete-index-target', 1)
+    const kept = header('delete-index-kept', 2)
+    for (const header of [target, kept]) {
+      const handle = await ctx.sessionPersistence.create(header)
+      await handle.append(messageEvents('permanent deletion needle'))
+      await handle.close()
+    }
+    const before = await ctx.sessionQuery.searchSessions({ query: 'needle' })
+    expect(new Set(before.items.map(item => item.header.id))).toEqual(new Set([target.id, kept.id]))
+    await ctx.sessionPersistence.delete(target.id)
+    const observer = new DatabaseSync(path)
+    try {
+      expect(observer.prepare('SELECT id FROM persisted_sessions ORDER BY id').all()).toEqual([{ id: kept.id }])
+      expect(observer.prepare('SELECT session_id FROM persisted_docs WHERE session_id = ?').all(target.id)).toEqual([])
+    } finally { observer.close() }
+    const after = await ctx.sessionQuery.searchSessions({ query: 'needle' })
+    expect(after.items.map(item => item.header.id)).toEqual([kept.id])
+  } finally { await ctx.fiber.dispose() }
 })

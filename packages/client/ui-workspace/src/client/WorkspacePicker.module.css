@@ -39,3 +39,84 @@
   flex: none;
   max-width: 75%;
 }
+
+.createDialog {
+  width: min(600px, 100%);
+  max-height: 100%;
+}
+
+.createForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nameInput {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font: inherit;
+}
+
+.folderHeading,
+.folderRow,
+.folderChoice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.folderHeading {
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  line-height: 1.5;
+}
+
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.folderRow {
+  justify-content: space-between;
+}
+
+.folderChoice {
+  flex: 1;
+}
+
+.folderPath {
+  overflow-wrap: anywhere;
+}
+
+.createContent {
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (pointer: coarse) {
+  .nameInput {
+    font-size: 16px;
+  }
+}

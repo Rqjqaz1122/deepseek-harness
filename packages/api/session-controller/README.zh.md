@@ -27,6 +27,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+API 保留其创建或恢复的 Agent 的释放句柄，并在通用 Workspace 删除操作请求时释放；删除期间阻止激活。`api-session/deleted` 移除持久列表项和 Client 驻留状态，普通 `api-session/removed` 仍表示实时运行时脱离。通用删除策略由 [WorkspaceRegistry](../../workspace/workspace/README.zh.md) 负责。
+
 提示重试按首次已提交入队记录中的请求标识去重，消息被领取或删除后仍然有效。异步附件准备结束后再次检查，因此并发重试只接受一条输入。接受确认入队，不代表执行或完成。
 
 控制器通过可选服务方法 `agentPresets.presetForSession(session)` 读取 Session 已记录的预设。null 结果表示未记录预设；服务缺席表示控制器无法获知预设身份。

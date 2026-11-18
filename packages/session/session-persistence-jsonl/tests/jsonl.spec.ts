@@ -2923,3 +2923,87 @@ describe('JsonlSessionPersistence listing concurrency', () => {
     await expect(listingCtx.sessionPersistence.list()).rejects.toBe(earlierSessionFailure)
   })
 })
+
+describe('JsonlSessionPersistence: permanent deletion', () => {
+  let ctx: Context
+  beforeEach(async () => {
+    root = await freshRoot()
+    ctx = new Context()
+    await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+  })
+  afterEach(async () => { await ctx.fiber.dispose() })
+
+  it('removes every generation and closes readers while preserving another Session and the project', async () => {
+    const project = await freshRoot()
+    const target = meta('permanent-target', project)
+    const kept = meta('permanent-kept', project)
+    const source = join(project, 'project.txt')
+    await writeFile(source, 'keep project contents')
+    await writeLog(ctx.sessionPersistence, target, oneTurnLog())
+    await writeLog(ctx.sessionPersistence, kept, oneTurnLog())
+    const reader = await ctx.sessionPersistence.open(target.id, 'read')
+    await reader.read()
+    const dir = dirname(rawLogPath(root, project, target.id))
+    await writeFile(join(dir, 'session.v1.jsonl'), 'historical generation')
+    await writeFile(join(dir, 'abandoned.tmp'), 'partial artifact')
+    expect(await ctx.sessionPersistence.delete(target.id)).toBe(true)
+    expect(await readdir(dir)).toEqual(['session.lock'])
+    await expect(reader.read()).rejects.toMatchObject({ name: 'SessionHandleClosedError' })
+    expect(await ctx.sessionPersistence.stat(target.id)).toBeUndefined()
+    await expect(ctx.sessionPersistence.open(target.id, 'write')).rejects.toMatchObject({ name: 'SessionPersistenceNotFoundError' })
+    expect((await ctx.sessionPersistence.list()).map(entry => entry.header.id)).toEqual([kept.id])
+    expect(await readFile(source, 'utf8')).toBe('keep project contents')
+    expect((await readAll(ctx.sessionPersistence, kept.id)).events).toHaveLength(oneTurnLog().length)
+    const fresh = new Context()
+    try {
+      await fresh.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+      expect(await fresh.sessionPersistence.stat(target.id)).toBeUndefined()
+    } finally {
+      await fresh.fiber.dispose()
+    }
+  })
+
+  it('refuses a pending or materialized local writer without erasing data', async () => {
+    const target = meta('owned-delete', '/work')
+    const writer = await ctx.sessionPersistence.create(target)
+    try {
+      await expect(ctx.sessionPersistence.delete(target.id)).rejects.toMatchObject({ name: 'SessionAlreadyOwnedError' })
+      await writer.append(oneTurnLog())
+      await expect(ctx.sessionPersistence.delete(target.id)).rejects.toMatchObject({ name: 'SessionAlreadyOwnedError' })
+      expect(await ctx.sessionPersistence.stat(target.id)).toBeDefined()
+    } finally {
+      await writer.close()
+    }
+    expect(await ctx.sessionPersistence.delete(target.id)).toBe(true)
+  })
+
+  it('refuses a writer held by another backend instance and succeeds after it closes', async () => {
+    const target = meta('foreign-delete', '/work')
+    await writeLog(ctx.sessionPersistence, target, oneTurnLog())
+    const foreign = new Context()
+    try {
+      await foreign.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+      const writer = await foreign.sessionPersistence.open(target.id, 'write')
+      try {
+        await expect(ctx.sessionPersistence.delete(target.id)).rejects.toMatchObject({ name: 'SessionAlreadyOwnedError' })
+      } finally {
+        await writer.close()
+      }
+      expect(await ctx.sessionPersistence.delete(target.id)).toBe(true)
+    } finally {
+      await foreign.fiber.dispose()
+    }
+  })
+
+  it('retains the log when derived cleanup fails and permits a retry', async () => {
+    const target = meta('cleanup-delete', '/work')
+    await writeLog(ctx.sessionPersistence, target, oneTurnLog())
+    const failure = new Error('checkpoint medium unavailable')
+    const dispose = ctx.on('session/deleting', () => { throw failure })
+    await expect(ctx.sessionPersistence.delete(target.id)).rejects.toMatchObject({ errors: [failure] })
+    expect(await ctx.sessionPersistence.stat(target.id)).toBeDefined()
+    dispose()
+    expect(await ctx.sessionPersistence.delete(target.id)).toBe(true)
+    expect(await ctx.sessionPersistence.delete(target.id)).toBe(false)
+  })
+})

@@ -174,6 +174,10 @@ function harness(placement: Placement, controller: AbortController, book: Worksp
     },
     useCanOpen: <S,>(sel: (check: (address: string) => boolean) => S) =>
       sel(useSyncExternalStore(listener => hooks.canOpen.subscribe(listener), () => hooks.canOpen.getSnapshot())),
+    useWorkspaceFolders: (cwd: string) => {
+      const source = keyedHooks.workspaceFolders(cwd)
+      return useSyncExternalStore(listener => source.subscribe(listener), () => source.getSnapshot())
+    },
     useSearchPreferences: (cwd: string) => {
       const source = keyedHooks.searchPreferences(cwd)
       return useSyncExternalStore(listener => source.subscribe(listener), () => source.getSnapshot())

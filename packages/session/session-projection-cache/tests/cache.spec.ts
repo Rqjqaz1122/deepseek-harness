@@ -948,3 +948,17 @@ describe('SessionProjectionCache summary reads', () => {
     expect(cache.cachedSnapshot(headerOf(SessionId('summary-absent')), summaryKeys)).toBeUndefined()
   })
 })
+
+it('erases a deleted Session checkpoint and refuses later writes from retained state', async () => {
+  const { ctx, root, cache } = await harness()
+  const id = SessionId('permanent-cache-delete')
+  const { session, owner } = await ownedSession(ctx, id)
+  mark(session, ['private history'])
+  await cache.write(session)
+  expect(await storedRows(root, id)).toBeDefined()
+  await owner.dispose()
+  await ctx.parallel('session/deleting', id)
+  expect(await storedRows(root, id)).toBeUndefined()
+  await cache.write(session)
+  expect(await storedRows(root, id)).toBeUndefined()
+})

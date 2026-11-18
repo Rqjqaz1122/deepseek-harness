@@ -1,0 +1,6 @@
+- dialog "Permanently delete session":
+  - heading "Permanently delete session" [level=2]
+  - button "Close"
+  - paragraph: Permanently delete the history and indexes of “Permanent deletion target with a long title to verify wrapping in the confirmati”. This cannot be undone. Project files, other sessions, and shared attachments are kept.
+  - button "Cancel"
+  - button "Permanently delete session"

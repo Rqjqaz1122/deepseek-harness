@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+Permanent Session deletion evicts the prepared observation cache through `session/deleting` and prevents delayed preparations from repopulating that cache. Existing caller-owned observation leases retain their already-read values until released; deletion cannot revoke bytes a caller already holds.
+
 Use `ctx.sessionQuery` from application code when you need to read or search session history without touching the session service or a storage backend directly. The service is provided by a concrete backend plugin — the shipped composition mounts `@deepseek-ai/dsh-session-query-sqlite` ([README](../session-query-sqlite/README.md)) — so this package is never mounted alone. Everything below is available on `ctx.sessionQuery` once a backend is composed.
 
 ### What you can do

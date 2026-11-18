@@ -25,6 +25,8 @@ Use this package to apply one file-effect policy to every confined bash, filesys
 <a id="use-this-package"></a>
 ## Use this package
 
+When a Workspace registry is composed, a Session whose recorded cwd equals a registered primary directory also receives that workspace’s additional folders in `additionalWritableRoots`. This resolution applies after resume and fork, leaves other Sessions and agentless calls unchanged, and never changes the sandbox mode. A `workspace:folders` runtime-context section lists these folders in every mode, so the model can use absolute paths while the loop records the context. Deleting the registration removes its grants from future resolutions; existing operations and processes retain their resolved policy. Windows process grants retain the platform limitation below.
+
 Mount this package in any composition where sandbox-enforcing capabilities run: it owns the deployment default and the per-session overrides those capabilities consume, and it contributes the current policy to the model's runtime-context snapshot.
 
 ### When to choose it

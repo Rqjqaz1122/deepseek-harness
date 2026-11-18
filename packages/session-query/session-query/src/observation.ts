@@ -77,6 +77,7 @@ interface PreparedEntry {
  * cut stays valid for the lease lifetime even after a newer revision lands.
  */
 export class SessionObservationReader {
+  private readonly deletedIds = new Set<SessionId>()
   private readonly cache = new Map<SessionId, PreparedEntry>()
 
   /**
@@ -86,7 +87,9 @@ export class SessionObservationReader {
   constructor(
     private readonly ctx: Context,
     private readonly cacheCapacity: number = SESSION_QUERY_DEFAULT_PREPARED_SESSION_CACHE_SIZE,
-  ) {}
+  ) {
+    ctx.on('session/deleting', (id) => { this.deletedIds.add(id); this.cache.delete(id) })
+  }
 
   /**
    * Read domain-owned state from a live or prepared Session without publishing it.
@@ -245,6 +248,7 @@ export class SessionObservationReader {
 
   /** Insert or replace the entry for one id, then evict past the capacity. */
   private store(sessionId: SessionId, entry: PreparedEntry): void {
+    if (this.deletedIds.has(sessionId)) return
     // Replacing a stale revision only drops the map's reference; live leases
     // keep the old entry alive through their own references.
     this.cache.delete(sessionId)

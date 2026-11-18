@@ -23,6 +23,7 @@ const sessionId = z.string().transform(value => brandString<SessionId>(value))
  */
 export const workspaceRecord = z.object({
   path: z.string(),
+  additionalPaths: z.array(z.string()).optional(),
   title: z.string(),
   sessionIds: z.array(sessionId),
   createdAt: z.string(),

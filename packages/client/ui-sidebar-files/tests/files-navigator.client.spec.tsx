@@ -801,6 +801,13 @@ describe('navigatorGeometry', () => {
 })
 
 describe('relativeFileOf', () => {
+  it('resolves relative preview addresses from the primary directory before locating them in the selected folder', () => {
+    const secondary = '/work/backend'
+    expect(relativeFileOf(sessionFileAddress(SESSION, 'same.txt'), SESSION, secondary, ROOT)).toBeUndefined()
+    expect(relativeFileOf(sessionFileAddress(SESSION, `${secondary}/same.txt`), SESSION, secondary, ROOT)).toBe('same.txt')
+    expect(relativeFileOf(sessionFileAddress(SESSION, 'nested/file.txt'), SESSION, `${ROOT}/nested`, ROOT)).toBe('file.txt')
+  })
+
   it('reads this Session\'s files under the root, by relative or contained absolute path', () => {
     expect(relativeFileOf(sessionFileAddress(SESSION, 'src/a.ts'), SESSION, ROOT)).toBe('src/a.ts')
     expect(relativeFileOf(sessionFileAddress(SESSION, `${ROOT}/src/a.ts`), SESSION, ROOT)).toBe('src/a.ts')

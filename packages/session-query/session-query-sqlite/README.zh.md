@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+彻底删除 Session 后，`session/deleted` 在查询串行队列中移除其持久及实时全文记录。后续搜索不会从该索引恢复已删除历史。SQLite 空闲页、日志、外部备份及已读取数据的其他进程不属于应用层删除保证。
+
 当组合需要对会话历史进行排序后的全文搜索时——例如 Web 内容搜索或 `/resume` 既往工作检索——挂载本包。常用路径是显式的：挂载插件、给它一个专用数据库路径，然后从代码调用 `ctx.sessionQuery.searchSessions` 或 `searchEvents`。
 
 ### 何时选择

@@ -34,9 +34,10 @@ export class WorkspaceChangeFeed {
    * @param workspaceRoot - the session's workspace root path.
    * @param path - target path, resolved relative to the workspace root; Host metadata determines its type.
    * @param signal - generation cancellation.
+   * @param additionalPaths - Other registered folders admitting directory watches.
    * @returns `ready` after watching starts, then current metadata for target invalidations.
    */
-  async *follow(workspaceRoot: string, path: string, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame> {
+  async *follow(workspaceRoot: string, path: string, signal: AbortSignal, additionalPaths: readonly string[] = []): AsyncIterable<WorkspaceFileWatchFrame> {
     signal.throwIfAborted()
     // Instrumented observations remain queued while the target resolves.
     const follower = new ChangeFollower(() => {
@@ -68,7 +69,18 @@ export class WorkspaceChangeFeed {
           if (aborted()) return undefined
           throw error
         })
-        if (info?.type === 'directory' && !this.ctx.fs.contains(root, target)) {
+        let contained = this.ctx.fs.contains(root, target)
+        if (info?.type === 'directory' && !contained) {
+          for (const folder of additionalPaths) {
+            const additional = await this.ctx.fs.resolve(folder, { signal }).catch((error: unknown) => {
+              if (aborted()) return undefined
+              throw error
+            })
+            if (additional === undefined || aborted()) return undefined
+            if (this.ctx.fs.contains(additional, target)) { contained = true; break }
+          }
+        }
+        if (info?.type === 'directory' && !contained) {
           throw new RemoteError('workspace-file/outside-workspace', 'Directory is outside the workspace', { path })
         }
         return info

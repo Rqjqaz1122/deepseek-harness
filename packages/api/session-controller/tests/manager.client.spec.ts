@@ -51,6 +51,32 @@ function makeManager(
 }
 
 describe('SessionManager instances', () => {
+  it('keeps permanently deleted history absent after late lists, additions, and projection frames', async ({ mock, remote }) => {
+    const manager = makeManager(mock, remote)
+    onTestFinished(() => manager.dispose())
+    manager.handleSessionAdded(summary(S1))
+    manager.handleSessionAdded(summary(S2))
+    const response = Promise.withResolvers<Awaited<ReturnType<typeof remote.session.list>>>()
+    remote.session.list.mockReturnValueOnce(response.promise)
+    const refreshing = manager.refreshList()
+    manager.handleSessionDeleted(S1)
+    const stale = { ...summary(S1), projections: { kind: 'cached' as const, asOfSeq: 0, values: { title: 'deleted title' } } }
+    manager.handleSessionAdded(stale)
+    manager.handleSessionStatus(S1, true)
+    manager.handleControlFrame({ type: 'projection', sessionId: S1, seq: 2, changes: [{ key: 'title', val: 'late title' }] })
+    response.resolve(ok({ items: [stale, summary(S2)] }))
+    await refreshing
+    await manager.refreshProjections(S1)
+
+    expect(manager.getListSnapshot().items.map(item => item.sessionId)).toEqual([S2])
+    expect(manager.projectionValues(S1)).toBeUndefined()
+    expect(remote.session.projections).not.toHaveBeenCalled()
+    remote.session.list.mockResolvedValueOnce(ok({ items: [stale, summary(S2)] }))
+    await manager.refreshList()
+    expect(manager.getListSnapshot().items.map(item => item.sessionId)).toEqual([S2])
+    expect(manager.projectionValues(S1)).toBeUndefined()
+  })
+
   it.for(['event', 'list'] as const)(
     'forgets running when an unretained identity disappears through a %s',
     async (source, { mock, remote }) => {

@@ -2,7 +2,7 @@
 
 English | [中文](workspace.zh.md)
 
-A workspace is the persistent record of a directory the user works in: a stable id over a canonical path, a display title, and the ordered account of sessions that belong to it. The subsystem is one package ([dsh-workspace](../../packages/workspace/workspace), `ctx.workspaceRegistry`) — an optional host-side capability, not part of the agent-loop spine, and invisible to models (no tools, no prompt text, no session events). It stores its records through the [storage domain form](storage.md) and validates session membership against [`SessionHeader.cwd`](persistence.md#sessionheader--metadata-beside-the-log), so `storageDomain` and `sessionPersistence` are mandatory startup dependencies: an unavailable persistence peer leaves the plugin pending rather than being mistaken for an empty history. Design record: [domain KV storage Agent Note](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md); bootstrap and GUI ordering: [Workspace UI product-flow Agent Note](../../.agents/notes/archived/feature/2026-07-25-workspace-ui-product-flow.md).
+A workspace is the persistent record of a directory the user works in: a stable id over a canonical path, a display title, and the ordered account of sessions that belong to it. The subsystem is one package ([dsh-workspace](../../packages/workspace/workspace), `ctx.workspaceRegistry`) — an optional host-side capability, not part of the agent-loop spine, and defines no model tools or Session events. When composed, Sandbox Policy adds registered folders to the model’s logged runtime context and resolves their write grants under the existing sandbox mode. It stores its records through the [storage domain form](storage.md) and validates session membership against [`SessionHeader.cwd`](persistence.md#sessionheader--metadata-beside-the-log), so `storageDomain` and `sessionPersistence` are mandatory startup dependencies: an unavailable persistence peer leaves the plugin pending rather than being mistaken for an empty history. Design record: [domain KV storage Agent Note](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md); bootstrap and GUI ordering: [Workspace UI product-flow Agent Note](../../.agents/notes/archived/feature/2026-07-25-workspace-ui-product-flow.md).
 
 Source: [`packages/workspace/workspace/src/types.ts`](../../packages/workspace/workspace/src/types.ts)
 
@@ -40,6 +40,9 @@ interface Workspace {
    * afterwards, even when the directory disappears (see {@link status}).
    */
   readonly path: string
+
+  /** Additional canonical folders; the primary path remains the default command directory. */
+  readonly additionalPaths: readonly string[]
 
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
@@ -404,9 +407,16 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
 /**
- * Restore one archived Session to Workspace grouping surfaces.
- * @param request - Session identity to unarchive.
- * @returns the complete resulting archive set.
+ * Permanently delete an inactive Session through the shared domain entry.
+ * @param request - Session identity to erase.
+ * @returns confirmation after all deletion steps complete.
+ */
+@Remote('deleteSession') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue>
+
+/**
+ * Restore one archived Session.
+ * @param request - Session to unarchive.
+ * @returns the resulting archive set.
  */
 @Remote('unarchiveSession') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
@@ -526,14 +536,15 @@ Durable workspace registry. Startup waits for `sessionPersistence`, builds one c
  * Create or reuse a workspace for an existing directory. The fully qualified
  * path is canonicalized through `fs.realpath`; a relative, nonexistent, or
  * non-directory path rejects. Repeated calls for the same canonical path
- * return the existing entity without changing its title.
+ * return the existing entity without changing its title; an explicitly different folder set rejects.
  * A newly created workspace is prepended to the durable registry order.
  * Different canonical paths may share a display title.
  * @param path - Existing directory to own, in a fully qualified path spelling.
  * @param title - Display title used only when a new record is created.
+ * @param additionalPaths - Additional existing directories, canonicalized and deduplicated before any write.
  * @returns the existing or newly durable workspace.
  */
-async create(path: string, title?: string): Promise<Workspace>
+async create(path: string, title?: string, additionalPaths?: readonly string[]): Promise<Workspace>
 
 /**
  * Initialize the default Workspace only while both the registry and Session
@@ -601,6 +612,26 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
  * @returns resolution after durability, any stop requests, and follow-up admission.
  */
 archiveSession(sessionId: SessionId, options: ArchiveSessionOptions = {}): Promise<void>
+
+/**
+ * Test whether permanent deletion currently blocks activation of a Session.
+ * @param sessionId - Session to test.
+ * @returns whether deletion is in progress.
+ */
+isSessionDeleting(sessionId: SessionId): boolean
+
+/**
+ * Permanently delete one inactive Session, releasing its runtime and removing
+ * every stored generation, workspace membership, pin, and archive reference.
+ * Repeated calls finish any remaining cleanup. Running work refuses before
+ * mutation. Shared attachments, forked Sessions, and project files remain.
+ * Providers release runtimes through workspace/session-deleting and remove
+ * derived data through session/deleting. Cleanup failures reject and may
+ * leave partial effects; retry deletion to finish.
+ * @param sessionId - Session identity; missing Sessions are safe to delete again.
+ * @returns completion after storage and registry cleanup.
+ */
+deleteSession(sessionId: SessionId): Promise<void>
 
 /**
  * Unarchive one session durably by dropping it from the registry-global
@@ -689,6 +720,23 @@ Admit optional follow-up work after durable archival and any stop requests. Disp
  * @mode parallel
  */
 'workspace/session-archived'(request: SessionActivityRequest): Promise<void> | void
+```
+
+Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)
+
+<a id="workspacesession-deleting--parallel"></a>
+
+#### `workspace/session-deleting` — parallel
+
+Release the inactive Session's live runtime before erasing its stored log.
+
+```ts cordis-catalog
+/**
+ * Release the inactive Session's live runtime before erasing its stored log.
+ * @param request - Session blocked against new activation during deletion.
+ * @mode parallel
+ */
+'workspace/session-deleting'(request: SessionActivityRequest): Promise<void> | void
 ```
 
 Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)

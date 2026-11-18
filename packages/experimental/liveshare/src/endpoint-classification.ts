@@ -125,6 +125,7 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'directoryPicker/createDirectory': 'owner-only', // owner filesystem picker
   'directoryPicker/list': 'owner-only', // owner filesystem picker
   'directoryPicker/pick': 'owner-only', // owner filesystem picker
+  'workspace/deleteSession': 'owner-only',
   'workspace/archiveSession': 'owner-only', // owner archives a Session
   'workspace/create': 'owner-only', // owner creates a Workspace
   'workspace/delete': 'owner-only', // owner deletes a Workspace

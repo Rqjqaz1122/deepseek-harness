@@ -175,6 +175,18 @@
   margin-right: 12px;
 }
 
+.folderSelect {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 45%;
+  padding: 4px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font: inherit;
+}
+
 .body {
   flex: 1 1 auto;
   min-height: 0;
@@ -528,7 +540,8 @@
 
   /* Below 16px, mobile browsers zoom the page when a field takes focus. */
   .searchInput,
-  .ruleInput {
+  .ruleInput,
+  .folderSelect {
     font-size: 16px;
   }
 }

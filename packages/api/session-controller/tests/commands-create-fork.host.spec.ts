@@ -61,7 +61,7 @@ async function baseContext(): Promise<Context> {
 describe('Session creation failures', () => {
   it('creates in the default cwd without a named identity when no explicit target is supplied', async () => {
     const ctx = await baseContext()
-    ctx.provide('workspaceRegistry', { get: () => undefined, list: () => [], archivedSessionIds: [] } as never)
+    ctx.provide('workspaceRegistry', { isSessionDeleting: () => false, get: () => undefined, list: () => [], archivedSessionIds: [] } as never)
     const createSession = vi.fn(publishedSession(ctx, SessionId('session-minted')))
     const controller = new SessionCommandController(ctx, controllerAgents(ctx, { createSession }), '/default-workspace')
 
@@ -133,7 +133,7 @@ describe('Session creation failures', () => {
     },
   ])('maps $code creation failures', async ({ error, code }) => {
     const ctx = await baseContext()
-    ctx.provide('workspaceRegistry', { get: () => undefined, list: () => [] } as never)
+    ctx.provide('workspaceRegistry', { isSessionDeleting: () => false, get: () => undefined, list: () => [] } as never)
     const controller = new SessionCommandController(
       ctx,
       controllerAgents(ctx, { createSession: () => Promise.reject(error) }),
@@ -210,7 +210,7 @@ describe('Session fork failures', () => {
 
   it('maps an observation failure to an internal fork error', async () => {
     const ctx = await baseContext()
-    ctx.provide('workspaceRegistry', { list: () => [] } as never)
+    ctx.provide('workspaceRegistry', { isSessionDeleting: () => false, list: () => [] } as never)
     vi.spyOn(ctx.sessionQuery, 'observeSession').mockRejectedValue(new Error('storage offline'))
     const controller = new SessionCommandController(ctx, controllerAgents(ctx), '/default')
 
@@ -220,7 +220,7 @@ describe('Session fork failures', () => {
 
   it('rejects a Session with no completed turn', async () => {
     const ctx = await baseContext()
-    ctx.provide('workspaceRegistry', { list: () => [] } as never)
+    ctx.provide('workspaceRegistry', { isSessionDeleting: () => false, list: () => [] } as never)
     const source = ctx.sessions.create(SessionId('empty-source'))
     const controller = new SessionCommandController(ctx, controllerAgents(ctx), '/default')
 
@@ -262,7 +262,7 @@ describe('Session fork failures', () => {
       sessionIds: [source.id],
       attachSession: () => Promise.reject(new Error('workspace write failed')),
     } as unknown as Workspace
-    ctx.provide('workspaceRegistry', { list: () => [workspace] } as never)
+    ctx.provide('workspaceRegistry', { isSessionDeleting: () => false, list: () => [workspace] } as never)
     const create = vi.spyOn(ctx.agents, 'create').mockImplementation(
       (options: CreateAgentOptions) => Promise.resolve(resolvedHandle(ctx, options.sessionId)),
     )
@@ -278,7 +278,7 @@ describe('Session fork failures', () => {
 
   it('carries the composed Agent preset into the child metadata', async () => {
     const ctx = await baseContext()
-    ctx.provide('workspaceRegistry', { list: () => [] } as never)
+    ctx.provide('workspaceRegistry', { isSessionDeleting: () => false, list: () => [] } as never)
     const source = completedSession(ctx, 'preset-source', '/workspace')
     const create = vi.spyOn(ctx.agents, 'create').mockImplementation(
       (options: CreateAgentOptions) => Promise.resolve(resolvedHandle(ctx, options.sessionId)),

@@ -6,6 +6,22 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'delete.session': '彻底删除会话',
+  'delete.session.desc': '彻底删除“{title}”的历史记录和会话索引，无法撤销。项目文件、其他会话和共享附件会保留。',
+  'delete.session.active': '会话仍有运行任务或定时任务，请先停止后重试',
+  'delete.session.failed': '删除未完成，可能已清除部分数据，请重试以完成清理',
+
+  'create.title': '创建工作区',
+  'create.folders': '文件夹',
+  'create.addFolder': '添加文件夹',
+  'create.primaryHint': '选择一个主目录作为终端和命令的默认位置，聊天可访问所有文件夹',
+  'create.empty': '请添加至少一个文件夹',
+  'create.primary': '将 {path} 设为主目录',
+  'create.removeFolder': '移除 {path}',
+  'create.remove': '移除',
+  'create.submit': '创建',
+  'create.pending': '正在创建…',
+
   'defaultWorkspace.failed': '无法创建默认工作区，请通过“选择工作区”选择文件夹',
   'draft.workspaceRequired': '请先选择工作区',
   'draft.initializationFailed': '暂时无法填入草稿，请稍后重试',
@@ -132,6 +148,22 @@ export type WorkspaceKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'delete.session': 'Permanently delete session',
+  'delete.session.desc': 'Permanently delete the history and indexes of “{title}”. This cannot be undone. Project files, other sessions, and shared attachments are kept.',
+  'delete.session.active': 'Stop this session’s running work and schedules before deleting it.',
+  'delete.session.failed': 'Deletion did not finish and may have removed some data. Retry to complete cleanup.',
+
+  'create.title': 'Create workspace',
+  'create.folders': 'Folders',
+  'create.addFolder': 'Add folder',
+  'create.primaryHint': 'Choose a primary folder for terminals and commands. Chats can access every folder.',
+  'create.empty': 'Add at least one folder',
+  'create.primary': 'Use {path} as primary folder',
+  'create.removeFolder': 'Remove {path}',
+  'create.remove': 'Remove',
+  'create.submit': 'Create',
+  'create.pending': 'Creating…',
+
   'defaultWorkspace.failed': 'Unable to create default workspace. Use Choose workspace to select a folder.',
   'draft.workspaceRequired': 'Choose a workspace first.',
   'draft.initializationFailed': 'Could not fill the draft. Please try again shortly.',
@@ -255,6 +287,22 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'delete.session': 'セッションを完全に削除',
+  'delete.session.desc': '「{title}」の履歴とインデックスを完全に削除します。元に戻せません。プロジェクトファイル、他のセッション、共有添付ファイルは保持されます。',
+  'delete.session.active': '実行中の処理とスケジュールを停止してから再試行してください。',
+  'delete.session.failed': '削除が完了していません。一部のデータが削除された可能性があります。再試行して完了してください。',
+
+  'create.title': 'ワークスペースを作成',
+  'create.folders': 'フォルダー',
+  'create.addFolder': 'フォルダーを追加',
+  'create.primaryHint': 'ターミナルとコマンドの既定フォルダーを選択します。チャットはすべてのフォルダーにアクセスできます。',
+  'create.empty': 'フォルダーを追加してください',
+  'create.primary': '{path} を既定に設定',
+  'create.removeFolder': '{path} を削除',
+  'create.remove': '削除',
+  'create.submit': '作成',
+  'create.pending': '作成中…',
+
   'defaultWorkspace.failed': 'デフォルトのワークスペースを作成できません。ワークスペースを選択してフォルダーを選んでください。',
   'draft.workspaceRequired': '先にワークスペースを選択してください。',
   'draft.initializationFailed': '下書きを埋め込めませんでした。しばらくしてからもう一度お試しください。',
@@ -378,6 +426,22 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'delete.session': 'Eliminar sesión permanentemente',
+  'delete.session.desc': 'Eliminar el historial y los índices de «{title}». No se puede deshacer. Se conservan los archivos del proyecto, otras sesiones y los adjuntos compartidos.',
+  'delete.session.active': 'Detén las tareas y programaciones de esta sesión antes de eliminarla.',
+  'delete.session.failed': 'La eliminación no terminó y puede haber borrado algunos datos. Reintenta para completar la limpieza.',
+
+  'create.title': 'Crear espacio de trabajo',
+  'create.folders': 'Carpetas',
+  'create.addFolder': 'Añadir carpeta',
+  'create.primaryHint': 'Elige la carpeta principal para terminales y comandos. El chat puede acceder a todas.',
+  'create.empty': 'Añade al menos una carpeta',
+  'create.primary': 'Usar {path} como principal',
+  'create.removeFolder': 'Quitar {path}',
+  'create.remove': 'Quitar',
+  'create.submit': 'Crear',
+  'create.pending': 'Creando…',
+
   'defaultWorkspace.failed': 'No se puede crear el espacio de trabajo predeterminado. Utilice Elegir espacio de trabajo para seleccionar una carpeta.',
   'draft.workspaceRequired': 'Elija un espacio de trabajo primero.',
   'draft.initializationFailed': 'No se pudo completar el borrador. Inténtelo de nuevo en breve.',
@@ -501,6 +565,22 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'delete.session': 'Supprimer définitivement la session',
+  'delete.session.desc': 'Supprimer l’historique et les index de « {title} ». Cette action est irréversible. Les fichiers du projet, les autres sessions et les pièces jointes partagées sont conservés.',
+  'delete.session.active': 'Arrêtez les tâches et les programmations de cette session avant de la supprimer.',
+  'delete.session.failed': 'La suppression est incomplète et certaines données ont pu être effacées. Réessayez pour terminer.',
+
+  'create.title': 'Créer un espace de travail',
+  'create.folders': 'Dossiers',
+  'create.addFolder': 'Ajouter un dossier',
+  'create.primaryHint': 'Choisissez le dossier principal des terminaux et commandes. Le chat accède à tous les dossiers.',
+  'create.empty': 'Ajoutez au moins un dossier',
+  'create.primary': 'Utiliser {path} comme dossier principal',
+  'create.removeFolder': 'Retirer {path}',
+  'create.remove': 'Retirer',
+  'create.submit': 'Créer',
+  'create.pending': 'Création…',
+
   'defaultWorkspace.failed': 'Impossible de créer un espace de travail par défaut. Utilisez Choisir un espace de travail pour sélectionner un dossier.',
   'draft.workspaceRequired': "Choisissez d'abord un espace de travail.",
   'draft.initializationFailed': 'Impossible de remplir le projet. Veuillez réessayer sous peu.',
@@ -624,6 +704,22 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'delete.session': 'Sitzung endgültig löschen',
+  'delete.session.desc': 'Verlauf und Indizes von „{title}“ endgültig löschen. Dies kann nicht rückgängig gemacht werden. Projektdateien, andere Sitzungen und geteilte Anhänge bleiben erhalten.',
+  'delete.session.active': 'Beende laufende Aufgaben und Zeitpläne dieser Sitzung vor dem Löschen.',
+  'delete.session.failed': 'Das Löschen ist unvollständig. Einige Daten wurden möglicherweise gelöscht. Wiederhole den Vorgang zum Abschluss.',
+
+  'create.title': 'Arbeitsbereich erstellen',
+  'create.folders': 'Ordner',
+  'create.addFolder': 'Ordner hinzufügen',
+  'create.primaryHint': 'Wähle den Hauptordner für Terminals und Befehle. Chats können auf alle Ordner zugreifen.',
+  'create.empty': 'Füge mindestens einen Ordner hinzu',
+  'create.primary': '{path} als Hauptordner verwenden',
+  'create.removeFolder': '{path} entfernen',
+  'create.remove': 'Entfernen',
+  'create.submit': 'Erstellen',
+  'create.pending': 'Wird erstellt…',
+
   'defaultWorkspace.failed': 'Der Standardarbeitsbereich kann nicht erstellt werden. Verwenden Sie „Arbeitsbereich auswählen“, um einen Ordner auszuwählen.',
   'draft.workspaceRequired': 'Wählen Sie zunächst einen Arbeitsbereich.',
   'draft.initializationFailed': 'Der Entwurf konnte nicht ausgefüllt werden. Bitte versuchen Sie es in Kürze noch einmal.',
@@ -747,6 +843,22 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'delete.session': 'Удалить сеанс навсегда',
+  'delete.session.desc': 'Удалить историю и индексы «{title}» без возможности восстановления. Файлы проекта, другие сеансы и общие вложения сохранятся.',
+  'delete.session.active': 'Перед удалением остановите задачи и расписания этого сеанса.',
+  'delete.session.failed': 'Удаление не завершено. Часть данных могла быть удалена. Повторите для завершения очистки.',
+
+  'create.title': 'Создать рабочую область',
+  'create.folders': 'Папки',
+  'create.addFolder': 'Добавить папку',
+  'create.primaryHint': 'Выберите основную папку для терминалов и команд. Чат может работать со всеми папками.',
+  'create.empty': 'Добавьте хотя бы одну папку',
+  'create.primary': 'Сделать {path} основной папкой',
+  'create.removeFolder': 'Убрать {path}',
+  'create.remove': 'Убрать',
+  'create.submit': 'Создать',
+  'create.pending': 'Создание…',
+
   'defaultWorkspace.failed': 'Невозможно создать рабочую область по умолчанию. Используйте «Выбрать рабочее пространство», чтобы выбрать папку.',
   'draft.workspaceRequired': 'Сначала выберите рабочее место.',
   'draft.initializationFailed': 'Не удалось заполнить черновик. Пожалуйста, повторите попытку в ближайшее время.',
@@ -870,6 +982,22 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'delete.session': 'Excluir sessão permanentemente',
+  'delete.session.desc': 'Excluir o histórico e os índices de “{title}”. Esta ação não pode ser desfeita. Os arquivos do projeto, outras sessões e anexos compartilhados são mantidos.',
+  'delete.session.active': 'Pare as tarefas e os agendamentos desta sessão antes de excluí-la.',
+  'delete.session.failed': 'A exclusão não terminou e pode ter removido alguns dados. Tente novamente para concluir a limpeza.',
+
+  'create.title': 'Criar espaço de trabalho',
+  'create.folders': 'Pastas',
+  'create.addFolder': 'Adicionar pasta',
+  'create.primaryHint': 'Escolha a pasta principal para terminais e comandos. O chat pode acessar todas as pastas.',
+  'create.empty': 'Adicione pelo menos uma pasta',
+  'create.primary': 'Usar {path} como pasta principal',
+  'create.removeFolder': 'Remover {path}',
+  'create.remove': 'Remover',
+  'create.submit': 'Criar',
+  'create.pending': 'Criando…',
+
   'defaultWorkspace.failed': 'Não foi possível criar o espaço de trabalho padrão. Use Escolher espaço de trabalho para selecionar uma pasta.',
   'draft.workspaceRequired': 'Escolha um espaço de trabalho primeiro.',
   'draft.initializationFailed': 'Não foi possível preencher o rascunho. Por favor, tente novamente em breve.',

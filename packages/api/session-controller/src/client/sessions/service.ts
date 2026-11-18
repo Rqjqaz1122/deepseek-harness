@@ -407,6 +407,16 @@ export class ClientSessions implements ISessions {
    * Apply one remotely forwarded Session removal.
    * @param sessionId - removed Session identity.
    */
+  handleSessionDeleted(sessionId: SessionId): void {
+    this.manager.handleSessionDeleted(sessionId)
+    const scope = this.scopes.get(sessionId)
+    if (scope !== undefined) this.retireScope(sessionId, scope)
+  }
+
+  /**
+   * Apply one ordinary live-registry removal.
+   * @param sessionId - detached Session identity.
+   */
   handleSessionRemoved(sessionId: Parameters<SessionManager['handleSessionRemoved']>[0]): void {
     this.manager.handleSessionRemoved(sessionId)
   }

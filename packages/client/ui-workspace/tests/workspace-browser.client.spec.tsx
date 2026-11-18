@@ -326,8 +326,7 @@ describe('WorkspaceBrowser', () => {
     const add = screen.getByRole('button', { name: '添加工作区' })
     add.focus()
     fireEvent.click(add)
-    expect(document.activeElement).toBe(add)
-    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: '创建工作区' })).toBeTruthy()
     expect(panelInfo.activePanelId).toBe('panel-a')
     expect(b.props.open).not.toHaveBeenCalled()
     expect(b.props.startSession).not.toHaveBeenCalled()
@@ -1957,11 +1956,11 @@ describe('WorkspaceBrowser', () => {
     const b = mount({ wide: false })
     const add = screen.getByRole('button', { name: '添加工作区' })
     fireEvent.click(add)
-    const flow = screen.getByTestId('directory-flow')
+    const flow = screen.getByRole('dialog', { name: '创建工作区' })
     for (const wide of [true, false, true]) {
       rerender(b, { wide })
       expect(screen.getByRole('button', { name: '添加工作区' })).toBe(add)
-      expect(screen.getByTestId('directory-flow')).toBe(flow)
+      expect(screen.getByRole('dialog', { name: '创建工作区' })).toBe(flow)
     }
   })
 
@@ -2071,7 +2070,7 @@ describe('WorkspaceBrowser', () => {
     // one-row popover, and existing workspaces stay in the tree below.
     expect(screen.queryByRole('menu')).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'alpha' })).toBeNull()
-    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: '创建工作区' })).toBeTruthy()
   })
 
   it('hides the add button when no directory-flow occupant is composed', () => {
@@ -2649,9 +2648,11 @@ describe('Workspace tree grouping', () => {
         ? <button onClick={() => { owner.onPicked('/projects') }}>Pick directory</button> : null) as WorkspaceBrowserProps['renderSlot'],
     })
     fireEvent.click(screen.getByRole('button', { name: '添加工作区' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加文件夹' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pick directory' }))
+    fireEvent.click(screen.getByRole('button', { name: '创建' }))
     await waitFor(() => { expect(b.props.startSession).toHaveBeenCalledWith(wid('root'), { clearPreviousDraft: false }) })
-    expect(b.props.createWorkspace).toHaveBeenCalledWith({ path: '/projects' })
+    expect(b.props.createWorkspace).toHaveBeenCalledWith({ path: '/projects', title: 'projects', additionalPaths: [] })
     expect(screen.queryByRole('dialog')).toBeNull()
     rerender(b, { useWorkspaces: hook(workspaceState([child, root])) })
     expect(within(section('Projects')).getByText('Child')).toBeTruthy()

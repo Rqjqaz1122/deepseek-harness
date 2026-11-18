@@ -144,6 +144,8 @@ export interface FilesSearchState {
 
 /** One pane's navigator: whether and how wide it is shown, its tree once started, and its search. */
 export interface FilesPaneState {
+  /** User-selected registered folder; omitted selects the Session primary directory. */
+  selectedRoot?: string
   /**
    * Whether a preview's navigator is shown; `undefined`, hidden, until the
    * pane's first choice. The `files` page shows its tree regardless.
@@ -235,13 +237,14 @@ export function locateFile(tree: FilesTreeState, relativePath: string): TreeFile
  * @param address - the tab's content address.
  * @param sessionId - the Session the tree lists.
  * @param root - the tree's root.
+ * @param cwd - the Session directory resolving relative addresses; defaults to the tree root.
  * @returns the `/`-separated relative path, or `undefined` for anything else.
  */
-export function relativeFileOf(address: string, sessionId: SessionId, root: string): string | undefined {
+export function relativeFileOf(address: string, sessionId: SessionId, root: string, cwd: string = root): string | undefined {
   const file = parseFileAddress(address)
   if (file?.scope !== 'session' || file.sessionId !== sessionId) return undefined
   const path = file.path.replace(/\\/g, '/')
-  const normalized = isAbsoluteWorkspacePath(path) ? underRoot(path, root) : path
+  const normalized = underRoot(isAbsoluteWorkspacePath(path) ? path : childPath(cwd.replace(/\\/g, '/'), path), root)
   if (normalized === undefined || normalized === '' || isAbsoluteWorkspacePath(normalized)) return undefined
   return normalized.split('/').some(part => part === '' || part === '.' || part === '..') ? undefined : normalized
 }
@@ -285,6 +288,7 @@ function tree(state: FilesState, paneId: PaneId): FilesTreeState {
 
 /** The tree store's write set; every action names the pane it writes. */
 type FilesActions = {
+  selectRoot: (draft: FilesState, paneId: PaneId, root: string) => void
   autoRefresh: (draft: FilesState, paneId: PaneId, enabled: boolean) => void
   start: (draft: FilesState, paneId: PaneId, root: string) => void
   loading: (draft: FilesState, paneId: PaneId, path: string) => void
@@ -312,6 +316,12 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
   return defineStore({
     init: (): FilesState => ({ byPane: {} }),
     actions: {
+      selectRoot: (d, paneId: PaneId, root: string) => {
+        const current = pane(d, paneId)
+        current.selectedRoot = root
+        current.query = ''
+        current.search = undefined
+      },
       autoRefresh: (d, paneId: PaneId, enabled: boolean) => { tree(d, paneId).autoRefresh = enabled },
       /**
        * Seed one pane's tree at its workspace root, with the root expanded.

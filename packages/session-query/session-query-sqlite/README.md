@@ -25,6 +25,8 @@ Use this package to add ranked SQLite FTS5 search across session history, either
 <a id="use-this-package"></a>
 ## Use this package
 
+After permanent Session deletion, `session/deleted` removes its persisted and live full-text rows on the query serialization queue. The next search cannot recover the deleted history from this index. SQLite free pages, journals, external backups, and other processes that already read the data are outside application-level deletion guarantees.
+
 Mount this package when a composition needs ranked full-text search over session history — for example the Web content search or `/resume` prior-work retrieval. The common path is explicit: mount the plugin, give it a dedicated database path, and call `ctx.sessionQuery.searchSessions` or `searchEvents` from code.
 
 ### When to choose it
