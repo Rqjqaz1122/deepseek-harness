@@ -31,6 +31,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/workspace-man
 const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const MODE = webSnapshotMode()
 const BROWSER_EXPECTED = join(SNAPSHOT_DIR, 'directory-browser.expected.md')
+const MULTI_FOLDER_EXPECTED = fileURLToPath(new URL('./expected/workspace-management/multi-folder.expected.md', import.meta.url))
 const SEED_ID = 'workspace-management-web-e2e'
 // Both waits exceed ui-primitives' 200ms POINTER_GRACE_MS. Keep them above
 // that value if the shared setting changes.
@@ -51,7 +52,9 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
    * the click lands in the dialog with no menu in between.
    */
   async function browseTo(path: string): Promise<Locator> {
-    await page.getByRole('button', { name: 'Add workspace' }).click()
+    const creation = page.getByRole('dialog', { name: 'Create workspace', exact: true })
+    if (await creation.count() === 0) await page.getByRole('button', { name: 'Add workspace' }).click()
+    await creation.getByRole('button', { name: 'Add folder', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
     await dialog.waitFor({ timeout: 10_000 })
     await dialog.getByRole('button', { name: 'Edit path' }).click()
@@ -76,6 +79,7 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     // Creating selects the new folder in the listing; Open adopts it.
     await dialog.getByRole('button', { name: 'Open', exact: true }).click()
     await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+    await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Create', exact: true }).click()
     await expect.poll(
       () => scaffold.ctx.workspaceRegistry.resolveByPath(join(parent, name)),
       { timeout: 10_000 },
@@ -96,6 +100,7 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     const dialog = await browseTo(path)
     await dialog.getByRole('button', { name: 'Open', exact: true }).click()
     await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+    await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Create', exact: true }).click()
     await expect.poll(
       () => scaffold.ctx.workspaceRegistry.resolveByPath(path),
       { timeout: 10_000 },
@@ -456,6 +461,7 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
       await compareOrRefreshGolden(BROWSER_EXPECTED, snapshot, MODE)
       await dialog.getByRole('button', { name: 'Cancel' }).click()
       await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+      await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click()
     } finally {
       if (realHome === undefined) delete process.env.HOME
       else process.env.HOME = realHome
@@ -499,6 +505,7 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     expect(await dialog.getByText('alpha', { exact: true }).count()).toBe(1)
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+    await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click()
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -885,6 +892,72 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
+  it('permanently deletes a Session through its menu, preserving the project and other history', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-session-delete'))
+    const id = await seedSession(scaffold, await readFile(SEED, 'utf8'), 'permanent-delete-web')
+    const { title } = await scaffold.ctx.sessionController.rename({
+      sessionId: id, title: 'Permanent deletion target with a long title to verify wrapping in the confirmation dialog',
+    })
+    const projectFile = join(scaffold.workspaceCwd, 'keep-after-session-delete.txt')
+    await writeFile(projectFile, 'keep this project file')
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    const ungrouped = page.getByText('Ungrouped', { exact: true })
+    await ungrouped.waitFor({ timeout: 15_000 })
+    if (await ungrouped.locator('..').locator('..').getAttribute('aria-expanded') !== 'true') await ungrouped.click()
+    const row = page.getByRole('treeitem').filter({ has: page.getByText(title, { exact: true }) })
+    await row.waitFor({ timeout: 15_000 })
+    await row.click()
+    const openDelete = async () => {
+      await clickHoverAction(row, `Session actions for ${title}`)
+      await page.getByRole('menuitem', { name: 'Permanently delete session', exact: true }).click()
+      return page.getByRole('dialog', { name: 'Permanently delete session', exact: true })
+    }
+    let dialog = await openDelete()
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    expect(await scaffold.ctx.sessionPersistence.stat(id)).toBeDefined()
+    expect(await row.count()).toBe(1)
+    dialog = await openDelete()
+    const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+    await compareOrRefreshGolden(fileURLToPath(new URL('./expected/workspace-management/delete-session.expected.md', import.meta.url)), snapshot, MODE)
+    await page.getByRole('menu').waitFor({ state: 'hidden' })
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.setViewportSize({ width: 390, height: 740 })
+    const refuse = scaffold.ctx.on('workspace/session-activity', async (request, next) =>
+      request.sessionId === id ? [{ kind: 'turn' }, ...await next()] : next())
+    await dialog.getByRole('button', { name: 'Permanently delete session', exact: true }).click()
+    await dialog.getByRole('alert').filter({ hasText: 'Stop this session' }).waitFor()
+    expect(await scaffold.ctx.sessionPersistence.stat(id)).toBeDefined()
+    refuse()
+    const deletion = Promise.withResolvers<void>()
+    const pause = scaffold.ctx.on('workspace/session-deleting', async ({ sessionId }) => {
+      if (sessionId === id) await deletion.promise
+    })
+    try {
+      await dialog.getByRole('button', { name: 'Permanently delete session', exact: true }).click()
+      await dialog.getByRole('status').waitFor()
+      expect(await dialog.getByRole('button', { name: 'Cancel', exact: true }).isDisabled()).toBe(true)
+      expect(await dialog.getByRole('button', { name: 'Permanently delete session', exact: true }).isDisabled()).toBe(true)
+      await page.keyboard.press('Escape')
+      expect(await dialog.isVisible()).toBe(true)
+    } finally {
+      deletion.resolve()
+      pause()
+    }
+    await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+    await expect.poll(() => row.count(), { timeout: 10_000 }).toBe(0)
+    expect(scaffold.ctx.sessions.get(id)).toBeUndefined()
+    expect(await scaffold.ctx.sessionPersistence.stat(id)).toBeUndefined()
+    expect(await scaffold.ctx.sessionPersistence.stat(SessionId(SEED_ID))).toBeDefined()
+    expect(await readFile(projectFile, 'utf8')).toBe('keep this project file')
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    expect(await row.count()).toBe(0)
+  }, 90_000)
+
   it('opens folders with identical basenames as distinct workspaces', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-duplicate-basename'))
     const firstPath = join(scaffold.workspaceCwd, 'same-basename-a', 'xx')
@@ -1005,6 +1078,46 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     expect([...childWorkspace.sessionIds]).toEqual(childSessionIds)
     expect(tripwire.pageErrors).toEqual([])
   })
+
+  it('creates a named multi-folder workspace and browses each folder in the same chat', async () => {
+    const frontend = join(scaffold.workspaceCwd, 'multi-frontend')
+    const backend = join(scaffold.workspaceCwd, 'multi-backend')
+    await mkdir(frontend, { recursive: true })
+    await mkdir(backend, { recursive: true })
+    await writeFile(join(frontend, 'frontend.txt'), 'frontend')
+    await writeFile(join(backend, 'backend.txt'), 'backend')
+    for (const path of [frontend, backend]) {
+      const picker = await browseTo(path)
+      await picker.getByRole('button', { name: 'Open', exact: true }).click()
+    }
+    const creation = page.getByRole('dialog', { name: 'Create workspace', exact: true })
+    await creation.getByRole('textbox', { name: 'Workspace name', exact: true }).fill('Multi-folder product')
+    await compareOrRefreshGolden(MULTI_FOLDER_EXPECTED,
+      await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), MODE)
+    await creation.getByRole('button', { name: 'Create', exact: true }).click()
+    await creation.waitFor({ state: 'hidden' })
+    await expect.poll(async () => (await scaffold.ctx.workspaceRegistry.resolveByPath(frontend))?.sessionIds.length).toBe(1)
+    const workspace = (await scaffold.ctx.workspaceRegistry.resolveByPath(frontend))!
+    expect(workspace.title).toBe('Multi-folder product')
+    expect(workspace.additionalPaths).toEqual([backend])
+    const sessionId = workspace.sessionIds[0]!
+    const session = scaffold.ctx.sessions.get(sessionId)!
+    expect(scaffold.ctx.sandboxPolicy.resolve({ session }).additionalWritableRoots).toContain(backend)
+    await expect.poll(() => scaffold.ctx.agents.get(sessionId)).toBeDefined()
+    const prompt = await scaffold.ctx.systemPrompt.assemble({ agent: scaffold.ctx.agents.get(sessionId)! })
+    expect(prompt.contexts.find(context => context.name === 'workspace:folders')?.text).toContain(JSON.stringify([frontend, backend]))
+    await page.keyboard.press('Meta+Alt+P')
+    const folders = page.getByRole('combobox', { name: 'Select workspace folder', exact: true })
+    await folders.selectOption(backend)
+    await page.getByText('backend.txt', { exact: true }).waitFor()
+    await page.locator('[data-files-entry="file"]').getByRole('button', { name: 'backend.txt', exact: true }).click()
+    await expect.poll(() => page.locator('[data-textpreview-path]').textContent()).toBe(join(backend, 'backend.txt'))
+    await expect.poll(() => page.locator('[data-textpreview-line]').first().textContent()).toContain('backend')
+    await page.locator('[data-dockkit-tab]').filter({ has: page.getByText('Files', { exact: true }) }).click()
+    await folders.selectOption(frontend)
+    await page.getByText('frontend.txt', { exact: true }).waitFor()
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
 
   it.skipIf(MODE === 'record')('issued zero model calls and stayed clean', async () => {
     expect(tripwire.warnings).toEqual([])

@@ -399,6 +399,17 @@ abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistence
 abstract flush(): Promise<void>
 
 /**
+ * Erase all stored generations of an inactive Session. Callers must first
+ * release its live Agent; an active writer, including another process, refuses
+ * deletion. Read handles are closed. Missing ids resolve as a no-op.
+ * Project files and shared attachment objects are outside this operation.
+ * A failure may leave partial cleanup; retry this operation to finish.
+ * @param id - stored Session identity.
+ * @returns whether a stored log was removed.
+ */
+abstract delete(id: SessionId): Promise<boolean>
+
+/**
  * Observe one stored session without reading its event log or taking
  * ownership.
  *

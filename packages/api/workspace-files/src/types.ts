@@ -127,6 +127,8 @@ export interface WorkspaceDirectoryListing {
 
 /** One workspace-wide search by entry name or workspace-relative path. */
 export interface WorkspaceFileSearchRequest {
+  /** Registered folder to search; omitted selects the primary directory. */
+  readonly root?: string
   /**
    * Case-insensitive substring to find. Surrounding whitespace is trimmed, and
    * an empty result is refused. Without `/` it matches entry names; with `/` it

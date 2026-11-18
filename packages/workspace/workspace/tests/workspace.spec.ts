@@ -56,7 +56,14 @@ async function harness(options: HarnessOptions = {}) {
     listed.map(header => ({ header, revision: SessionPersistenceRevision(`rev-${header.id}`) })))
   const open = vi.fn(() => { throw new Error('event bodies must not be opened') })
   const stat = vi.fn(() => { throw new Error('per-session stat must not be needed') })
-  ctx.provide('sessionPersistence', { list, open, stat } as never)
+  const remove = vi.fn(async (id: SessionId) => {
+    await ctx.parallel('session/deleting', id)
+    const existed = listed.some(header => header.id === id)
+    listed = listed.filter(header => header.id !== id)
+    await ctx.parallel('session/deleted', id)
+    return existed
+  })
+  ctx.provide('sessionPersistence', { list, open, stat, delete: remove } as never)
 
   if (options.sessionStore === true) {
     await ctx.plugin(SessionStore)
@@ -83,6 +90,7 @@ async function harness(options: HarnessOptions = {}) {
     list,
     open,
     stat,
+    remove,
     setSessions: (headers: SessionHeader[]) => { listed = headers },
   }
 }
@@ -1582,5 +1590,132 @@ describe('archive follow-up lifecycle', () => {
       expect(storedState(result.pool).archivedSessionIds).toEqual(['cleanup-error'])
       expect(warning).toHaveBeenCalled()
     } finally { await result.ctx.fiber.dispose() }
+  })
+})
+
+describe('named multi-folder workspaces', () => {
+  it('canonicalizes and deduplicates folders, and restores the same primary and title after reopening storage', async () => {
+    const primary = await makeDir('frontend')
+    const secondary = await makeDir('backend')
+    const alias = join(primary, 'backend-link')
+    await symlink(secondary, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    const h = await harness()
+    const workspace = await h.registry.create(primary, 'Full stack', [secondary, alias, primary])
+    expect(workspace.additionalPaths).toEqual([secondary])
+    const id = workspace.id
+    await h.fiber.dispose()
+    const reopened = await harness({ pool: h.pool })
+    try {
+      expect(reopened.registry.get(id)).toMatchObject({ path: primary, title: 'Full stack', additionalPaths: [secondary] })
+    } finally { await reopened.fiber.dispose() }
+  })
+
+  it('writes nothing when any folder is missing or is a file', async () => {
+    const primary = await makeDir('frontend')
+    const notDirectory = join(primary, 'file.txt')
+    await writeFile(notDirectory, '')
+    const h = await harness()
+    try {
+      await expect(h.registry.create(primary, 'Bad', [join(primary, 'missing')])).rejects.toThrow()
+      await expect(h.registry.create(primary, 'Bad', [notDirectory])).rejects.toThrow('not a directory')
+      expect(h.registry.list()).toEqual([])
+      expect(h.changes).toEqual([])
+    } finally { await h.fiber.dispose() }
+  })
+
+  it('refuses a different folder set for an existing primary directory', async () => {
+    const primary = await makeDir('primary')
+    const secondary = await makeDir('secondary')
+    const third = await makeDir('third')
+    const h = await harness()
+    try {
+      const workspace = await h.registry.create(primary, 'One', [secondary])
+      await expect(h.registry.create(primary, 'Two', [third])).rejects.toThrow('different folders')
+      expect(workspace.additionalPaths).toEqual([secondary])
+      expect(h.registry.list()).toHaveLength(1)
+    } finally { await h.fiber.dispose() }
+  })
+})
+
+it.each([{ additionalPaths: ['relative'] }, { additionalPaths: ['/primary', '/primary'] }])('refuses invalid or duplicate persisted additional folders: $additionalPaths', async ({ additionalPaths }) => {
+  const pool = storedPool([['invalid-folders', { ...record('/primary', []), additionalPaths }]], {
+    initialized: true, workspaceIds: [WorkspaceId('invalid-folders')],
+  })
+  await expect(harness({ pool })).rejects.toThrow('invalid or duplicate folder paths')
+})
+
+it('resolves folder grants from durable workspaces for resumed chats and keeps other chats isolated', async () => {
+  const primary = await makeDir('client')
+  const secondary = await makeDir('server')
+  const h = await harness()
+  try {
+    await h.registry.create(primary, 'Product', [secondary])
+    const { default: SessionProjections } = await import('@deepseek-ai/dsh-session-projection')
+    const { default: SystemPrompt } = await import('@deepseek-ai/dsh-system-prompt')
+    const { default: SandboxPolicy } = await import('@deepseek-ai/dsh-sandbox-policy')
+    const { Session } = await import('@deepseek-ai/dsh-session')
+    const integration = await h.ctx.plugin({ apply: async (ctx: Context) => {
+      await ctx.plugin(SessionProjections)
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SandboxPolicy, { mode: 'workspace-write' })
+    } })
+    onTestFinished(() => integration.dispose())
+    const active = Session.create(SessionId('multi-folder'), [], header('multi-folder', primary))
+    const restored = Session.create(active.id, active.snapshotEvents(), active.header)
+    const unrelated = Session.create(SessionId('other-folder'), [], header('other-folder', secondary))
+    expect(h.ctx.sandboxPolicy.resolve({ session: active }).additionalWritableRoots).toEqual([secondary])
+    expect(h.ctx.sandboxPolicy.resolve({ session: restored }).additionalWritableRoots).toEqual([secondary])
+    expect(h.ctx.sandboxPolicy.resolve({ session: unrelated }).additionalWritableRoots).toBeUndefined()
+    expect(h.ctx.sandboxPolicy.resolve().additionalWritableRoots).toBeUndefined()
+    expect(h.ctx.sandboxPolicy.resolve({ session: active, mode: 'read-only' }).mode).toBe('read-only')
+  } finally { await h.fiber.dispose() }
+})
+
+describe('WorkspaceRegistry permanent Session deletion', () => {
+  it('removes stored history, workspace membership, and pin or archive references idempotently', async () => {
+    const project = await makeDir('delete-session')
+    const target = header('delete-target', project)
+    const kept = header('delete-kept', project)
+    const h = await harness({ sessions: [target, kept] })
+    try {
+      const workspace = h.registry.list()[0]!
+      await h.registry.pinSession(target.id)
+      await h.registry.deleteSession(target.id)
+      expect(workspace.sessionIds).toEqual([kept.id])
+      expect(h.registry.pinnedSessionIds).not.toContain(target.id)
+      expect((await h.ctx.sessionPersistence.list()).map(row => row.header.id)).toEqual([kept.id])
+      await h.registry.archiveSession(kept.id)
+      await h.registry.deleteSession(kept.id)
+      expect(h.registry.archivedSessionIds).toEqual([])
+      expect(workspace.sessionIds).toEqual([])
+      await expect(h.registry.deleteSession(kept.id)).resolves.toBeUndefined()
+    } finally { await h.ctx.fiber.dispose() }
+  })
+
+  it('blocks activation during deletion and refuses running work without deleting history', async () => {
+    const target = header('busy-delete', await makeDir('busy-delete'))
+    const h = await harness({ sessions: [target] })
+    try {
+      h.ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+        expect(h.registry.isSessionDeleting(sessionId)).toBe(true)
+        return [{ kind: 'turn' as never }, ...await next()]
+      })
+      await expect(h.registry.deleteSession(target.id)).rejects.toMatchObject({ name: 'WorkspaceActiveSessionError' })
+      expect(h.remove).not.toHaveBeenCalled()
+      expect(h.registry.isSessionDeleting(target.id)).toBe(false)
+    } finally { await h.ctx.fiber.dispose() }
+  })
+
+  it('reports incomplete deletion and permits retry after storage recovers', async () => {
+    const target = header('failed-delete', await makeDir('failed-delete'))
+    const h = await harness({ sessions: [target] })
+    try {
+      h.remove.mockRejectedValueOnce(new Error('disk failure'))
+      await expect(h.registry.deleteSession(target.id)).rejects.toMatchObject({
+        name: 'SessionDeletionError', code: 'SESSION_DELETE_FAILED',
+      })
+      expect(h.registry.list()[0]!.sessionIds).toContain(target.id)
+      await expect(h.registry.deleteSession(target.id)).resolves.toBeUndefined()
+    } finally { await h.ctx.fiber.dispose() }
   })
 })

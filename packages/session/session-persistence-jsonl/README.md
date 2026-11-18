@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+Permanent `delete(id)` holds the same kernel lease as a writer, removes all generations and temporary artifacts in the Session directory, and invalidates parsed-log caches. The empty `session.lock` file remains to preserve POSIX inode exclusion; it contains no conversation data. Predecessor generations are removed before the selected generation. A cleanup failure rejects and permits retry; active writers are never expropriated.
+
 Mount this backend when a composition needs durable sessions backed by per-session files. The common path is explicit: load the session service, mount the backend, and give it a root directory.
 
 ### When to choose it

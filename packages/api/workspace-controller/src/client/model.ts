@@ -1,6 +1,7 @@
 /** Client-side Workspace state model shared by Remote transport and UI projection. */
 
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import { isRemoteFailure } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteFailure, RemoteResult, TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
@@ -9,6 +10,7 @@ import type {
   WorkspaceArchiveValue,
   WorkspaceBaseline,
   WorkspaceCreateRequest,
+  WorkspaceDeleteSessionValue,
   WorkspaceCreateValue,
   WorkspaceDeleteValue,
   WorkspaceInsertSessionBeforeRequest,
@@ -179,6 +181,15 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     })
     if (result.ok) this.upsert(result.value.workspace)
     return result
+  }
+
+  /**
+   * Permanently delete an inactive Session.
+   * @param sessionId - Session to erase.
+   * @returns generated Remote receipt; list streams deliver resulting metadata.
+   */
+  deleteSession(sessionId: SessionId): Promise<RemoteResult<WorkspaceDeleteSessionValue>> {
+    return this.remote.deleteSession({ sessionId })
   }
 
   /**

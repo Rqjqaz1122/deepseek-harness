@@ -341,6 +341,7 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
   mkdirSync(join(root, name), { recursive: true })
   await revealNavigationDrawer(page, 'en')
   await page.getByRole('button', { name: 'Add workspace', exact: true }).click()
+  await page.getByRole('button', { name: 'Add folder', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: 'Edit path' }).click()
@@ -348,6 +349,7 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
   await pathInput.fill(join(root, name))
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: 'Open', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Create', exact: true }).click()
   // The pick connected the workspace: the blank session's live composer
   // replaces the locked placeholder and enables.
   await page.locator('[data-composer-input][contenteditable="true"][data-placeholder="Describe what you want to build, / commands, @ files or sessions"]')
@@ -368,6 +370,7 @@ export async function connectFreshWorkspaceZh(page: Page, root: string, name = '
   mkdirSync(join(root, name), { recursive: true })
   await revealNavigationDrawer(page, 'zh')
   await page.getByRole('button', { name: '添加工作区', exact: true }).click()
+  await page.getByRole('button', { name: '添加文件夹', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '选择工作区目录' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: '编辑路径' }).click()
@@ -375,6 +378,7 @@ export async function connectFreshWorkspaceZh(page: Page, root: string, name = '
   await pathInput.fill(join(root, name))
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: '打开', exact: true }).click()
+  await page.getByRole('dialog', { name: '创建工作区', exact: true }).getByRole('button', { name: '创建', exact: true }).click()
   const editable = modelAvailable ? '[contenteditable="true"]' : ''
   await page.locator(`[data-composer-input]${editable}[data-placeholder="描述你想要构建的内容, / 调用指令, @ 文件或对话"]`)
     .waitFor({ timeout: 15_000 })

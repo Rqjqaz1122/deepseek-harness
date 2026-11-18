@@ -10,6 +10,7 @@ import { DirectoryPickerController } from './directory-picker.ts'
 import { WorkspaceFeed, workspaceView } from './feed.ts'
 import { defaultWorkspaceDirectory, validateDocumentsDirectory } from './default-directory.ts'
 import type {
+  WorkspaceDeleteSessionRequest, WorkspaceDeleteSessionValue,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceBaseline,
@@ -162,9 +163,19 @@ export class WorkspaceController extends TypertRemoteService {
   }
 
   /**
-   * Restore one archived Session to Workspace grouping surfaces.
-   * @param request - Session identity to unarchive.
-   * @returns the complete resulting archive set.
+   * Permanently delete an inactive Session through the shared domain entry.
+   * @param request - Session identity to erase.
+   * @returns confirmation after all deletion steps complete.
+   */
+  @Remote('deleteSession')
+  deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue> {
+    return this.commands.deleteSession(request)
+  }
+
+  /**
+   * Restore one archived Session.
+   * @param request - Session to unarchive.
+   * @returns the resulting archive set.
    */
   @Remote('unarchiveSession')
   unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue> {

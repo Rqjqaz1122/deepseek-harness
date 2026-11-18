@@ -16,6 +16,7 @@
  * @module @deepseek-ai/dsh-session-projection-cache
  */
 
+import type {} from '@deepseek-ai/dsh-session-persistence'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
@@ -108,6 +109,7 @@ export class SessionProjectionCache extends Service {
   static Config: z<Config> = Config
 
   private table?: KvTable<SessionId, CheckpointRecord>
+  private readonly deletedSessions = new Set<SessionId>()
   private readonly dirty = new Map<Session, DirtyState>()
 
   constructor(ctx: Context, public config: Config) {
@@ -120,6 +122,10 @@ export class SessionProjectionCache extends Service {
     this.ctx.effect(() => () => domain.close(), 'sessionProjectionCache.domainClose')
     this.table = domain.table('sessions')
     this.installWritePath()
+    this.ctx.on('session/deleting', async (id) => {
+      this.deletedSessions.add(id)
+      await this.requireTable().delete(id)
+    })
   }
 
   /**
@@ -388,6 +394,7 @@ export class SessionProjectionCache extends Service {
 
   /** Replace one session's stored record with its log identity and a detached snapshot of `rows`. */
   private async put(id: SessionId, identity: CheckpointIdentity, rows: ProjectionCheckpoint): Promise<void> {
+    if (this.deletedSessions.has(id)) return
     const detached = snapshotJsonValue(rows)
     if (detached === undefined) {
       throw new TypeError('projection checkpoint is not losslessly JSON-serializable (a unit state violates the plain-JSON contract)')

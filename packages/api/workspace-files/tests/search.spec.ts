@@ -51,6 +51,15 @@ const search = (
 const pathsOf = (result: WorkspaceFileSearchResult): string[] => result.matches.map(match => match.path)
 
 describe('workspaceFiles.search — matching', () => {
+  it('searches the selected registered folder and refuses an unregistered root', async () => {
+    await writeFile(join(harness.outside, 'backend.txt'), '')
+    const request = { root: harness.outside, query: 'backend', excludedPaths: [], includeHidden: false, respectGitignore: false }
+    const service = harness.endpoint()
+    expect((await failureOf(service.search(harness.scope, request, signal()))).code).toBe('workspace-file/outside-workspace')
+    const result = await service.search({ ...harness.scope, additionalPaths: [harness.outside] }, request, signal())
+    expect(pathsOf(result)).toEqual(['backend.txt'])
+  })
+
   it('matches entry names case-insensitively, shallower levels first, with each type', async () => {
     await files('src/deep/Button.tsx', 'BUTTON.md', 'notes.txt')
     await files('src/button-group/a', 'src/button-group/b')

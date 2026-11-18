@@ -1,5 +1,7 @@
 /** The face's search: when it runs, the preferences it follows, what it aborts and drops, and the store writes it makes. */
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import type { WorkspaceSnapshot, WorkspaceSource, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { PaneId, TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -19,11 +21,11 @@ const CAN_OPEN = { getSnapshot: () => () => true, subscribe: () => () => {} }
 const NO_NAVIGATION = () => ({ getSnapshot: () => ({ address: '', params: undefined, revision: 0 }), subscribe: () => () => {} })
 
 /** One Session's face over a shared book, with its pane attached. */
-function session(id: string, book: WorkspaceSearchPreferenceBook) {
+function session(id: string, book: WorkspaceSearchPreferenceBook, workspaces?: WorkspaceSource) {
   const instance = createFilesStore().create()
   const script = scriptedList()
   const searches = scriptedSearch(['src/a.ts'])
-  const face = filesFace(script.list, script.watch, CAN_OPEN, NO_NAVIGATION, searches.search, book)(
+  const face = filesFace(script.list, script.watch, CAN_OPEN, NO_NAVIGATION, searches.search, book, workspaces)(
     id as SessionId, instance, () => () => {},
   )
   const tab = new AbortController()
@@ -41,6 +43,33 @@ function session(id: string, book: WorkspaceSearchPreferenceBook) {
 }
 
 describe('the face\'s search', () => {
+  it('refreshes folder choices after subscription gaps while preserving stable snapshots and session isolation', () => {
+    const workspaces = createSnapshotStore<WorkspaceSnapshot>({
+      items: [], archivedSessionIds: [], pinnedSessionIds: [], phase: 'ready', state: 'idle', error: null,
+    })
+    const h = session('s-1', memoryBook(), workspaces)
+    const folders = h.face.keyedHooks.workspaceFolders(ROOT)
+    const original = folders.getSnapshot()
+    expect(original).toEqual([ROOT])
+    expect(folders.getSnapshot()).toBe(original)
+    const workspace: WorkspaceView = {
+      workspaceId: 'workspace-1' as WorkspaceView['workspaceId'], path: ROOT, title: 'Product',
+      additionalPaths: ['/work/backend'], sessionIds: [], createdAt: '', updatedAt: '',
+    }
+    workspaces.set({ ...workspaces.getSnapshot(), items: [workspace] })
+    expect(folders.getSnapshot()).toEqual([ROOT, '/work/backend'])
+    expect(h.face.keyedHooks.workspaceFolders('/other').getSnapshot()).toEqual(['/other'])
+    const changed = vi.fn()
+    const stop = folders.subscribe(changed)
+    workspaces.set({ ...workspaces.getSnapshot(), items: [] })
+    expect(changed).toHaveBeenCalledOnce()
+    expect(folders.getSnapshot()).toEqual([ROOT])
+    stop()
+    workspaces.set({ ...workspaces.getSnapshot(), items: [workspace] })
+    expect(folders.getSnapshot()).toEqual([ROOT, '/work/backend'])
+    expect(changed).toHaveBeenCalledOnce()
+  })
+
   it('searches nothing for a pane no navigator attached', () => {
     const h = session('s-1', memoryBook())
     h.face.setQuery('pane-2' as PaneId, ROOT, 'a')
@@ -57,7 +86,7 @@ describe('the face\'s search', () => {
     h.searches.answerWith(undefined)
     h.face.setQuery(PANE, ROOT, '  a ')
     expect(h.search).toHaveBeenCalledExactlyOnceWith('s-1', {
-      query: 'a', excludedPaths: enabledPaths(defaultSearchPreferences().rules), includeHidden: false, respectGitignore: true,
+      root: ROOT, query: 'a', excludedPaths: enabledPaths(defaultSearchPreferences().rules), includeHidden: false, respectGitignore: true,
     }, expect.any(AbortSignal))
     expect(h.state()).toEqual({ pending: true, result: undefined })
     h.searches.started[0]!.settle(answer(['src/a.ts'], { truncated: true, incomplete: true }))
@@ -169,7 +198,7 @@ describe('the face\'s search', () => {
     const before = one.face.keyedHooks.searchPreferences('/work/other').getSnapshot()
     one.face.setSearchPreferences(ROOT, { rules: [], showHidden: true })
     expect(two.search).toHaveBeenLastCalledWith(
-      's-2', { query: 'a', excludedPaths: [], includeHidden: true, respectGitignore: true }, expect.any(AbortSignal),
+      's-2', { root: ROOT, query: 'a', excludedPaths: [], includeHidden: true, respectGitignore: true }, expect.any(AbortSignal),
     )
     await searchesSettled()
     expect(two.result()).toMatchObject({ hiddenLeftOut: false, excluded: false })

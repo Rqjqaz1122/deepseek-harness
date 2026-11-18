@@ -20,6 +20,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Simplified Chinese dictionary and key-set source of truth. */
 export const zh = {
+  'folders.select': '选择工作区文件夹',
   'shortcut.noSession': '请先选择会话',
   'type.label': '文件',
   'guide.title': '工作区文件',
@@ -80,6 +81,7 @@ export type SidebarFilesKey = keyof typeof zh
 
 /** English dictionary, checked against the Chinese key set. */
 export const en = {
+  'folders.select': 'Select workspace folder',
   'shortcut.noSession': 'Select a session first',
   'type.label': 'Files',
   'guide.title': 'Workspace files',
@@ -137,6 +139,7 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'folders.select': 'ワークスペースのフォルダーを選択',
   'shortcut.noSession': '先にセッションを選択してください',
   'type.label': 'ファイル',
   'guide.title': 'ワークスペースのファイル',
@@ -194,6 +197,7 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'folders.select': 'Seleccionar carpeta del espacio de trabajo',
   'shortcut.noSession': 'Seleccione una sesión primero',
   'type.label': 'Archivos',
   'guide.title': 'Archivos de espacio de trabajo',
@@ -251,6 +255,7 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'folders.select': 'Choisir un dossier de l’espace de travail',
   'shortcut.noSession': "Sélectionnez d'abord une session",
   'type.label': 'Fichiers',
   'guide.title': "Fichiers de l'espace de travail",
@@ -308,6 +313,7 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'folders.select': 'Ordner des Arbeitsbereichs auswählen',
   'shortcut.noSession': 'Wählen Sie zunächst eine Sitzung aus',
   'type.label': 'Dateien',
   'guide.title': 'Arbeitsbereichsdateien',
@@ -365,6 +371,7 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'folders.select': 'Выбрать папку рабочей области',
   'shortcut.noSession': 'Сначала выберите сеанс',
   'type.label': 'Файлы',
   'guide.title': 'Файлы рабочей области',
@@ -422,6 +429,7 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'folders.select': 'Selecionar pasta do espaço de trabalho',
   'shortcut.noSession': 'Selecione uma sessão primeiro',
   'type.label': 'Arquivos',
   'guide.title': 'Arquivos do espaço de trabalho',

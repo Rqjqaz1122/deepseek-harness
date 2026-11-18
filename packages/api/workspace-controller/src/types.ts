@@ -19,6 +19,8 @@ export interface WorkspaceView {
   readonly workspaceId: WorkspaceId
   /** Canonical host directory path. */
   readonly path: string
+  /** Additional canonical folders; omitted for a single-folder Workspace. */
+  readonly additionalPaths?: readonly string[]
   /** User-visible title. */
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
@@ -45,6 +47,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       readonly activity: readonly SessionActivity[]
     }
     /** The Session or its anchor is not in the Workspace's manual order. */
+    'workspace/session-delete-failed': { readonly sessionId: SessionId }
     'workspace/move-invalid': {
       readonly workspaceId: WorkspaceId
       readonly sessionId: SessionId
@@ -61,9 +64,23 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 
+/** Permanent deletion of one inactive Session. */
+export interface WorkspaceDeleteSessionRequest {
+  readonly sessionId: SessionId
+}
+
+/** Receipt after all Session deletion steps complete. */
+export interface WorkspaceDeleteSessionValue {
+  readonly deleted: true
+}
+
 /** Existing directory requested for Workspace adoption. */
 export interface WorkspaceCreateRequest {
+  /** Optional display name; blank names are refused. */
+  readonly title?: string
   readonly path: string
+  /** Additional existing directories, canonicalized and deduplicated with the primary path. */
+  readonly additionalPaths?: readonly string[]
 }
 
 /** Created or previously registered Workspace. */

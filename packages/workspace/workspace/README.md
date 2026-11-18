@@ -25,6 +25,10 @@ Use this package to keep an ordered, persistent list of project directories and 
 <a id="use-this-package"></a>
 ## Use this package
 
+`ctx.workspaceRegistry.deleteSession(sessionId)` permanently removes an inactive Session, its stored generations, workspace membership, pin, and archive reference. The call is idempotent. Running turns, descendants, jobs, or schedules refuse deletion before mutation. Runtime owners release their handles through `workspace/session-deleting`; persistence providers coordinate derived-data cleanup. A `SessionDeletionError` means cleanup may be partial: retry deletion to finish. Project files, independent forks, and shared attachment or spill objects remain. This is application-level removal, not secure disk erasure.
+
+`create(path, title?, additionalPaths?)` registers one named workspace with an immutable primary directory and optional additional directories. All directories must exist; creation canonicalizes and deduplicates them before any storage write. `path` remains the default command directory and the Session membership key. A repeated primary path with an explicitly different folder set rejects; an omitted folder set reuses the existing workspace. Saved records without `additionalPaths` remain single-folder workspaces. Folder lists cannot be edited after creation; removing the registration retains every directory and Session.
+
 Use this package to give the product a project list: named directories the user works in, the sessions that ran in each, a stable order, and a way to hide sessions without losing them or bring them back. The API contracts behind each action live in the implementation section.
 
 ### When to use it
@@ -167,7 +171,7 @@ Independent of live requests: the package never touches a request prefix, so it 
 
 These limits define when the project list is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
-- **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and session deletion or folder removal are separate, absent capabilities.
+- **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and permanent Session deletion is a separate explicit operation; folder removal is not provided.
 - **Missing paths retain recorded ownership, not verified symlink history** — a removed symlink and an incorrect but missing absolute cwd cannot be distinguished from existing records; both preserve an already-accounted id. No unaccounted session is assigned by this exception, and an account already removed from storage is not reconstructed.
 - **External changes are seen late** — if another process deletes or damages a directory, the project reflects it only at the next refresh or restart.
 - **Archive and unarchive enforce different session checks** — a restore only drops an id from the archive set, so an entry whose session is gone still unarchives and leaves no unknown referent; a restore of an id that is not archived resolves without writing, while `archiveSession` rejects a session that is neither live nor persisted.
@@ -180,10 +184,6 @@ These limits define when the project list is a poor fit or needs special operati
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-This Dev Note is working context for maintainers: open questions and directions that are not decided. It is explicitly non-authoritative — shipped behavior, limits, and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
-
-#### Open: the `create(path, title?)` title parameter
-
-The `title` parameter has no production caller since the gateway's create-by-name branch was removed; a code TODO proposes dropping the parameter and its `@param` clause together ([note](../../../.agents/notes/archived/simplification/2026-07-31-one-route-to-add-a-workspace.md)).
+None.
 
 </details>

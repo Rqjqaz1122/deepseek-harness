@@ -270,9 +270,9 @@ Windows 卸载程序会随应用一起删除 Electron 用户数据目录（`%APP
 
 ## 更新
 
-本地未签名 macOS 包在 [Desktop 清单](package.json) 设置 `dshDesktopManualUpdateRepository` 时，通过公开 GitHub Releases 检查手动更新。“**检查更新…**”和现有后台计划比较安装包版本；更新提示先显示确认框，再用浏览器打开已检查的 Release 页面。下载匹配的 DMG，退出应用后手动替换。此模式不在应用内下载、替换或重启。Release 列表为空时提示尚无更高版本的兼容安装包；HTTP 失败、限流及无效响应显示检查失败。不支持私有仓库或内嵌 GitHub Token。
+本地未签名 macOS 包在 [Desktop 清单](package.json) 设置 `dshDesktopManualUpdateRepository` 时，通过 GitHub Pages 静态清单检查手动更新。“**检查更新…**”和现有后台计划比较安装包版本；更新提示先显示确认框，再用浏览器打开已检查的 Release 页面。下载匹配的 DMG，退出应用后手动替换。此模式不在应用内下载、替换或重启。渠道清单为空时提示尚无更高版本的兼容安装包；HTTP 失败及无效响应显示检查失败。客户端不请求 GitHub REST API，也不携带账号凭据；各渠道通过 ETag 重新验证缓存，重新验证失败仍报告检查失败。不支持私有仓库或内嵌 GitHub Token。
 
-检查范围为最近 100 个 Release，接受 `v0.2.3`、`desktop-v0.2.3-rc.1` 或 `0.2.3` 等语义化版本标签。Release 必须包含已上传且非空、名称以 `-mac-<arch>.dmg` 或 `-mac-<arch>-unsigned.dmg` 结尾的安装包，架构须匹配已安装应用。稳定通道同时排除 GitHub 预发布和语义化预发布版本；开发通道包含这些版本。只有最高兼容版本高于已安装版本时才提示更新。仅有 Git 标签、源码归档或 Actions 产物不构成兼容安装包。签名包保留原有自动更新配置。仓库设置参见[本地 macOS 打包](packaging/README.zh.md#local-macos-dmg-without-release-signing)。
+检查读取 `https://<owner>.github.io/<repository>/updates/stable.json` 或 `nightly.json`；用户／组织 Pages 仓库省略仓库路径。版本 1 清单标明仓库与渠道，列出版本、标签、预发布状态和安装包信息（系统、架构、文件名、字节数、SHA-256 及 GitHub Release 下载地址）。发布遍历全部分页 Release，接受 `v0.2.3`、`desktop-v0.2.3-rc.1` 或 `0.2.3` 等语义化版本标签。Release 必须包含已上传且非空、名为 `deepseek-harness-<version>-mac-<arch>[-unsigned].dmg` 且带 GitHub SHA-256 摘要的安装包。稳定通道同时排除 GitHub 预发布和语义化预发布版本；开发通道包含这些版本。只有最高兼容版本高于已安装版本时才提示更新。仅有 Git 标签、源码归档或 Actions 产物不构成兼容安装包。签名包保留原有自动更新配置。Pages 配置及发布参见 [GitHub Release 自动打包](packaging/README.zh.md#github-release-automation)，仓库设置参见[本地 macOS 打包](packaging/README.zh.md#local-macos-dmg-without-release-signing)。
 
 Windows 下载完成后的更新确认说明应用会在安装期间关闭、完成后自动打开，并提示期间不要重复启动。安装器携带 `--updated` 重启应用并直接打开工作区时，壳会将主窗口前置并聚焦一次，不启用永久置顶。启动进入欢迎页时会清除此请求，使后续登录保留正常的激活行为。普通启动和其他平台不执行此前置步骤。
 

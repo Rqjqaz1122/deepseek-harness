@@ -690,6 +690,12 @@ declare module '@deepseek-ai/cordis' {
      */
     'api-session/removed'(sessionId: SessionId): void
     /**
+     * A Session's durable history was permanently deleted.
+     * @param sessionId - removed Session identity.
+     * @mode emit
+     */
+    'api-session/deleted'(sessionId: SessionId): void
+    /**
      * One Agent changed running state.
      * @mode emit
      * @param sessionId - Agent and Session identity.

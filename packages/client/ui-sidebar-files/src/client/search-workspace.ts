@@ -11,6 +11,8 @@ import type { SearchMatch } from './search-tree.ts'
 
 /** What one search asks the Host for. */
 export interface WorkspaceSearchRequest {
+  /** Registered folder selected in the navigator. */
+  readonly root?: string
   /** The query without surrounding whitespace; never empty. */
   readonly query: string
   /** The paths of the enabled exclusion rules, in list order, as `search-rules.ts` defines them. */

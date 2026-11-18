@@ -27,6 +27,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-workspace'
 import { SandboxInvalidRootError } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -179,6 +180,17 @@ export class SandboxPolicyService extends Service {
       apply: (state, event) => (event.type === 'sandbox/mode' ? event.data.mode : state),
     })
 
+    ctx.inject(['workspaceRegistry', 'systemPrompt'], (scope: Context) => {
+      scope.systemPrompt.context({
+        name: 'workspace:folders',
+        order: scope.systemPrompt.getContextOrder('SANDBOX_POLICY') + 1,
+        text: ({ agent }) => {
+          const workspace = scope.workspaceRegistry.list().find(item => item.path === agent?.session.header.cwd)
+          return workspace === undefined || workspace.additionalPaths.length === 0 ? ''
+            : `Workspace folders: ${JSON.stringify([workspace.path, ...workspace.additionalPaths])}. The first folder is the default command working directory. Use absolute paths to work in the other folders. File access follows the current DSH file policy.`
+        },
+      })
+    })
     ctx.inject(['systemPrompt'], (scope: Context) => {
       scope.systemPrompt.context({
         name: 'sandbox:policy',
@@ -208,9 +220,13 @@ export class SandboxPolicyService extends Service {
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
     const registrations = session === undefined ? undefined : this.writableRootRegistrations.get(session)
-    const additionalWritableRoots = registrations === undefined
-      ? this.additionalWritableRoots
-      : resolveAdditionalWritableRoots([...(this.additionalWritableRoots ?? []), ...registrations.values()])
+    const workspace = session === undefined ? undefined
+      : this.ctx.get('workspaceRegistry')?.list().find(item => item.path === session.header.cwd)
+    const additionalWritableRoots = resolveAdditionalWritableRoots([
+      ...(this.additionalWritableRoots ?? []),
+      ...(registrations?.values() ?? []),
+      ...(workspace?.additionalPaths ?? []),
+    ])
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
       workspaceRoot: this.sessionWorkspaceRoot(session),

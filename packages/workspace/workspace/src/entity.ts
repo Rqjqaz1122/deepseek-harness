@@ -87,6 +87,10 @@ export class WorkspaceEntity implements Workspace {
     return this.record.path
   }
 
+  get additionalPaths(): readonly string[] {
+    return this.record.additionalPaths ?? []
+  }
+
   get title(): string {
     return this.record.title
   }

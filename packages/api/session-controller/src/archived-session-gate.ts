@@ -48,7 +48,7 @@ export function underArchivedSession(ctx: Context, agent: Agent): boolean {
   let header = agent.session.header
   const visited = new Set<SessionId>()
   while (!visited.has(header.id)) {
-    if (archived.includes(header.id)) return true
+    if (archived.includes(header.id) || ctx.workspaceRegistry.isSessionDeleting(header.id)) return true
     visited.add(header.id)
     if (header.origin !== 'subagent' || header.parentSession === undefined) return false
     const parent = ctx.sessions.get(header.parentSession)

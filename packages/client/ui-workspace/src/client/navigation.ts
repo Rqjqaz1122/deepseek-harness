@@ -90,6 +90,11 @@ export interface UiWorkspace {
    */
   startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void
   /**
+   * Permanently delete an inactive Session and clear its current selection.
+   * @param sessionId - Session to erase.
+   */
+  deleteSession(sessionId: SessionId): Promise<void>
+  /**
    * Archive a Session and clear it when it is the current selection.
    * @param sessionId - Session to archive.
    * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
@@ -377,6 +382,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const message = this.ctx.locale.bind('workspace')('draft.initializationFailed')
     this.notify({ kind: 'createFailed', message })
     throw new Error(message)
+  }
+
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    await this.workspaces.deleteSession(sessionId)
+    if (this.mainReference?.sessionId === sessionId) this.clearMain()
+    await this.sessions.refresh()
   }
 
   async archiveSession(sessionId: SessionId, options: { readonly stopActivity?: boolean } = {}): Promise<void> {

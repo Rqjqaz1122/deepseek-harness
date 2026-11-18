@@ -138,3 +138,16 @@ describe('workspaceFiles.list — gates', () => {
     expect(failure.code).toBe('gateway/bad-request')
   })
 })
+
+it('lists an additional registered folder but rejects a symlink escaping every folder', async () => {
+  const unregistered = join(workspace, '..', 'unregistered')
+  await mkdir(unregistered)
+  await writeFile(join(outside, 'backend.ts'), '')
+  await directoryLink(unregistered, join(outside, 'escape'))
+  const scope = { ...harness.scope, additionalPaths: [outside] }
+  expect((await endpoint().list(scope, outside, signal())).entries.map(entry => entry.name)).toContain('backend.ts')
+  await expect(endpoint().list(scope, join(outside, 'escape'), signal()))
+    .rejects.toMatchObject({ code: 'workspace-file/outside-workspace' })
+  await expect(endpoint().list(harness.scope, outside, signal()))
+    .rejects.toMatchObject({ code: 'workspace-file/outside-workspace' })
+})

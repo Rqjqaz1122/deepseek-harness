@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
+  SessionDeletionError,
   WorkspaceActiveSessionError,
   WorkspaceArchivedSessionPinError,
   WorkspaceId,
@@ -13,6 +14,7 @@ import {
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
+  WorkspaceDeleteSessionRequest, WorkspaceDeleteSessionValue,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateRequest,
@@ -45,12 +47,11 @@ export class WorkspaceCommands {
   create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue> {
     return this.enqueue(async () => {
       try {
+        const title = request.title?.trim()
+        if (title === '') throw new RemoteError('gateway/bad-request', 'Workspace requires a non-blank title', {})
         const existing = await this.ctx.workspaceRegistry.resolveByPath(request.path)
-        if (existing !== undefined) {
-          return { workspace: workspaceView(existing), created: false }
-        }
-        const workspace = await this.ctx.workspaceRegistry.create(request.path)
-        return { workspace: workspaceView(workspace), created: true }
+        const workspace = await this.ctx.workspaceRegistry.create(request.path, title, request.additionalPaths)
+        return { workspace: workspaceView(workspace), created: existing === undefined }
       } catch (error) {
         if (remoteErrorOf(error) !== undefined) throw error
         throw new RemoteError(
@@ -180,6 +181,28 @@ export class WorkspaceCommands {
       throw error
     }
     return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
+  }
+
+  /**
+   * Erase an inactive Session through the shared domain deletion entry point.
+   * @param request - Session to permanently remove.
+   * @returns confirmation after durable cleanup.
+   */
+  async deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue> {
+    try {
+      await this.ctx.workspaceRegistry.deleteSession(request.sessionId)
+    } catch (error) {
+      if (error instanceof WorkspaceActiveSessionError) {
+        throw new RemoteError('workspace/session-active', error.message,
+          { sessionId: request.sessionId, activity: error.activity }, { cause: error })
+      }
+      if (error instanceof SessionDeletionError) {
+        throw new RemoteError('workspace/session-delete-failed', error.message,
+          { sessionId: request.sessionId }, { cause: error })
+      }
+      throw error
+    }
+    return { deleted: true }
   }
 
   /**

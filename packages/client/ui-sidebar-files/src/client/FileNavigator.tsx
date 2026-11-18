@@ -166,17 +166,18 @@ function SearchFailure({ failure, onRetry, t }: {
  * @returns the navigator, or nothing while hidden or without a workspace.
  */
 export function FileNavigator({
-  useTabInfo, page, onOpen, sessionId, useSessions, useStore, actions, useRowWidth, useCanOpen, useSearchPreferences,
+  useTabInfo, page, onOpen, sessionId, useSessions, useStore, actions, useRowWidth, useCanOpen, useSearchPreferences, useWorkspaceFolders,
   attach, placeBeside, hold, toggle, scrolled, bodyDrawn, currentDrawn, navigatorDrawn,
   setQuery, toggleSearch, retrySearch, setSearchPreferences, searchDrawn, t, renderFactorySlot, useContextMenu,
 }: FactoryComponentPropsOf<'sidebar.files.navigator'>): ReactNode {
   const { tab, panel } = useTabInfo()
   const { getTriggerProps } = useContextMenu()
   const paneId = panel.id
-  // A Session's working directory comes from its header and never changes once
-  // known, so every search result the pane's store holds is rooted at it.
-  const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
+  const primary = useSessions(sessions => sessions.byId[sessionId]?.cwd)
   const state = useStore(store => store.byPane[paneId])
+  const folders = useWorkspaceFolders(primary ?? '') ?? []
+  const selected = state?.selectedRoot
+  const cwd = selected !== undefined && folders.includes(selected) ? selected : primary
   const rowWidth = useRowWidth(paneId)
   const canOpen = useCanOpen(check => check)
   const open = page || state?.open === true
@@ -221,8 +222,14 @@ export function FileNavigator({
   // Only a navigator that can draw a tree keeps the workspace command on its tab.
   useEffect(() => page || cwd === undefined ? undefined : placeBeside(tab.id), [page, cwd, placeBeside, tab.id])
   useEffect(() => cwd === undefined || !open ? undefined : hold(paneId, cwd), [cwd, open, paneId, hold])
+  const previousRoot = useRef(cwd)
+  useEffect(() => {
+    if (previousRoot.current === cwd) return
+    previousRoot.current = cwd
+    if (cwd !== undefined) setQuery(paneId, cwd, '')
+  }, [cwd, paneId, setQuery])
 
-  const relativePath = tree === undefined ? undefined : relativeFileOf(tab.contentId, sessionId, tree.root)
+  const relativePath = tree === undefined ? undefined : relativeFileOf(tab.contentId, sessionId, tree.root, primary)
   const location = useMemo(
     () => tree === undefined || relativePath === undefined ? undefined : locateFile(tree, relativePath),
     [tree, relativePath],
@@ -255,13 +262,13 @@ export function FileNavigator({
       root: treeRootOf(tree.root),
       expanded: tree.expanded,
       onToggle: (entry: TreeEntry) => { toggle(paneId, parentOf(tree, entry.path), entry.path, tree.expanded) },
-      onOpen: (entry: TreeEntry) => { onOpen(fileAddressFor(sessionId, tree.root, entry.path)) },
-      canOpen: (entry: TreeEntry) => canOpen(fileAddressFor(sessionId, tree.root, entry.path)),
+      onOpen: (entry: TreeEntry) => { onOpen(fileAddressFor(sessionId, primary, entry.path)) },
+      canOpen: (entry: TreeEntry) => canOpen(fileAddressFor(sessionId, primary, entry.path)),
       rowTriggerProps: (entry: TreeEntry, kind: 'file' | 'directory') => getTriggerProps(kind === 'directory'
         ? { kind, value: { sessionId, path: entry.path } }
         : { kind, value: { sessionId, path: entry.path, paneId } }),
     }
-  }, [tree, paneId, sessionId, toggle, canOpen, onOpen, getTriggerProps])
+  }, [tree, primary, paneId, sessionId, toggle, canOpen, onOpen, getTriggerProps])
   // The results keep their own expansion; every other gesture acts as on the tree.
   const resultView = useMemo(() => view === undefined || resultTree === undefined ? undefined : {
     ...view,

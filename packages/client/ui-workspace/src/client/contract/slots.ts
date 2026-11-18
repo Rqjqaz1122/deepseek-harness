@@ -13,7 +13,7 @@
  * picking interaction — a renderless native-chooser driver or an in-app
  * browsing dialog. ui-workspace owns the trigger (the "Add workspace…"
  * entry, present only while the hole is occupied) and the adoption
- * semantics (`createWorkspace({ path })`, the retryable error dialog,
+ * semantics (the named folder draft, one atomic creation request,
  * Choose again); the occupant owns everything between `open` and the picked path,
  * including creating a new directory to hand back. That occupant-owned
  * creation is why adding a workspace has a single route: an unoccupied hole
@@ -34,6 +34,7 @@
  * the row's Session identity; a Session binding would activate and retain
  * every listed Session.
  */
+import type { WorkspaceCreateRequest } from '@deepseek-ai/dsh-api-workspace-controller/types'
 import type { ContextMenuTarget } from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import type {
   HostObservable, InjectFace, PropsHooks, PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, PropsStore, SlotHookFactory,
@@ -76,9 +77,9 @@ export type WorkspaceActionRequest = {
 export interface DirectoryFlowOwnerProps {
   /** True while a picking interaction is requested; flipping back to false withdraws the request. */
   open: boolean
-  /** True while the owner adopts a picked path (`createWorkspace` in flight); occupants disable their commit affordances. */
+  /** True while the owner is processing a picker result; occupants disable their commit affordances. */
   busy: boolean
-  /** The operator picked a directory (absolute host path); the owner adopts it. */
+  /** The operator picked a directory (absolute host path); the owner stages it in the workspace draft. */
   onPicked: (path: string) => void
   /** The operator dismissed the interaction; the owner just closes the flow. */
   onCancel: () => void
@@ -297,8 +298,8 @@ export type WorkspaceBrowserInjected = {
   insertWorkspaceBefore: (workspaceId: WorkspaceId, beforeWorkspaceId?: WorkspaceId) => Promise<void>
   /** Remove a Session from the registry-global archived set (the search results' restore button). */
   unarchiveSession: (sessionId: SessionId) => Promise<void>
-  /** Adopt a picked host directory as a real Workspace before targeting a Session. */
-  createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  /** Register the named set of existing folders before targeting a Session. */
+  createWorkspace: (input: WorkspaceCreateRequest) => Promise<WorkspaceView>
 }
 
 /** The browser's declared viewing store handle, shared with the row actions that write view state. */
@@ -491,6 +492,20 @@ export type RowToastProps =
   & Pick<RowToastInjected, 'dismissToast'>
   & PropsHooks<RowToastInjected['hooks']>
 
+/** Captured identity for irreversible Session deletion confirmation. */
+export type SessionDeleteRequest = { readonly sessionId: SessionId; readonly displayTitle: string }
+
+/** Root overlay callbacks shared with Session menu entries. */
+export type SessionDeleteInjected = {
+  hooks: { deleteRequest: HostObservable<SessionDeleteRequest | null> }
+  settleSessionDelete: () => void
+  deleteSession: (sessionId: SessionId) => Promise<void>
+}
+
+/** Permanent deletion confirmation props. */
+export type SessionDeleteProps = PropsRuntime<'shell.overlay'> & PropsLocale<'workspace'>
+  & Omit<SessionDeleteInjected, 'hooks'> & PropsHooks<SessionDeleteInjected['hooks']>
+
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
 export type WorkspaceBrowserProps =
   PropsRuntime<'sidebar.workspaces'>
@@ -513,8 +528,8 @@ export type WorkspaceBrowserProps =
  * supplies the implicit index signature required by the registry.
  */
 export type WorkspacePickerInjected = DirectoryPickingInjected & {
-  /** Adopt a picked host directory as a real Workspace before targeting a Session. */
-  createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
+  /** Register the named set of existing folders before targeting a Session. */
+  createWorkspace: (input: WorkspaceCreateRequest) => Promise<WorkspaceView>
 }
 
 /**

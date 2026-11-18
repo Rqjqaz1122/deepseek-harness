@@ -27,6 +27,8 @@ Desktop analytics follows the [product collection policy](../../client/product-a
 <a id="use-this-package"></a>
 ## Use this package
 
+The API retains disposers for Agents it creates or resumes and releases them when the shared Workspace deletion operation asks. Activation is blocked during deletion. `api-session/deleted` removes durable list rows and resident Client state; ordinary `api-session/removed` continues to describe live-runtime detachment. Shared deletion policy belongs to [WorkspaceRegistry](../../workspace/workspace/README.md).
+
 Prompt retries use the request identity in the first committed inbox insertion, including after the message is claimed or removed. Admission checks again after asynchronous attachment preparation, so concurrent retries accept one input. Acceptance acknowledges insertion, not execution or completion.
 
 The controller reads a Session's recorded preset through the optional `agentPresets.presetForSession(session)` service method. A null result means no preset was recorded; an absent service means preset identity is unavailable to the controller.

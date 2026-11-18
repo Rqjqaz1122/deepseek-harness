@@ -118,6 +118,7 @@ export class SessionManager {
 
 
   private listSnapshotCache: SessionListSnapshot
+  private readonly deletedIds = new Set<SessionId>()
   /** Entry-identity cache (reference stability): list rebuilds reuse the previous entry
    *  object when every field matches — wire refreshes mint all-new summary objects, so identity
    *  must be recovered by value or every SessionListItem memo misses on every refresh. */
@@ -338,6 +339,7 @@ export class SessionManager {
    * @returns completion of the current or newly started read.
    */
   refreshProjections(sessionId: SessionId): Promise<void> {
+    if (this.deletedIds.has(sessionId)) return Promise.resolve()
     const existing = this.projectionInflight.get(sessionId)
     if (existing !== undefined) return existing.promise
     if (this.projectionLoads.get(sessionId)?.state === 'ready') return Promise.resolve()
@@ -416,7 +418,7 @@ export class SessionManager {
           for (const s of baseline) {
             if (s.running && !removedSincePull.has(s.sessionId)) this.engagedSessions.add(s.sessionId)
           }
-          const summaries = mutations.reduce(applyMutation, baseline)
+          const summaries = mutations.reduce(applyMutation, baseline).filter(summary => !this.deletedIds.has(summary.sessionId))
           this.summaries = summaries
           // A full list can remove identities without a removal frame.
           const retained = this.retainedIds(summaries)
@@ -581,6 +583,8 @@ export class SessionManager {
   /** Apply immediately and retain for replay when a list response is in flight. */
   private recordMutation(mutation: SessionListMutation): void {
     if (this.disposed) return
+    const id = 'summary' in mutation ? mutation.summary.sessionId : mutation.sessionId
+    if (mutation.kind !== 'remove' && this.deletedIds.has(id)) return
     this.listMutations?.push(mutation)
     this.summaries = applyMutation(this.summaries, mutation)
     this.notifier.markDirty()
@@ -626,6 +630,7 @@ export class SessionManager {
       this.replaceControlBaseline(frame.value)
       return
     }
+    if (this.deletedIds.has(frame.sessionId)) return
     const store = this.projectionStore(frame.sessionId)
     const seq = SessionSeq(frame.seq)
     for (const change of frame.changes) store.apply(change.key, change.val, seq)
@@ -635,6 +640,7 @@ export class SessionManager {
   private replaceControlBaseline(baseline: SessionControlBaseline): void {
 
     for (const [sessionId, block] of Object.entries(baseline.projections)) {
+      if (this.deletedIds.has(sessionId as SessionId)) continue
       const store = this.projectionStore(sessionId as SessionId)
       const asOfSeq = sessionSeqCursor(block.asOfSeq)
       store.seed({ ...block, asOfSeq })
@@ -647,6 +653,7 @@ export class SessionManager {
    * @param summary - current Host summary for the added Session.
    */
   handleSessionAdded(summary: SessionSummary): void {
+    if (this.deletedIds.has(summary.sessionId)) return
     this.mergeSummary(summary)
     if (!this.disposed && summary.running) this.engagedSessions.add(summary.sessionId)
     this.sessions.get(summary.sessionId)?.handleBlank(this.effectiveBlank(summary))
@@ -662,6 +669,7 @@ export class SessionManager {
    * this connection's seqs, so it only fills keys no sequenced row holds.
    */
   private applyListBlock(sessionId: SessionId, block: SessionProjectionHints): void {
+    if (this.deletedIds.has(sessionId)) return
     const store = this.projectionStore(sessionId)
     switch (block.kind) {
       case 'sequenced': {
@@ -680,6 +688,19 @@ export class SessionManager {
   /**
    * Apply one Session removal forwarded through `ctx.remote.$on`.
    * @param sessionId - removed Session identity.
+   */
+  handleSessionDeleted(sessionId: SessionId): void {
+    this.deletedIds.add(sessionId)
+    this.handleSessionRemoved(sessionId)
+    this.recordMutation({ kind: 'remove', sessionId })
+    this.projectionStores.delete(sessionId)
+    const session = this.sessions.get(sessionId)
+    if (session !== undefined) void this.drop(sessionId, session)
+  }
+
+  /**
+   * Apply an ordinary live-registry removal without erasing durable history.
+   * @param sessionId - detached Session identity.
    */
   handleSessionRemoved(sessionId: SessionId): void {
     const durableSubagent = this.subagentAddress(sessionId) !== undefined
@@ -705,6 +726,7 @@ export class SessionManager {
    * @param running - current Agent running state.
    */
   handleSessionStatus(sessionId: SessionId, running: boolean): void {
+    if (this.deletedIds.has(sessionId)) return
     if (!this.disposed && running) this.engagedSessions.add(sessionId)
     this.recordMutation({ kind: 'status', sessionId, running, agentAvailable: true })
     this.sessions.get(sessionId)?.handleRunning(running)

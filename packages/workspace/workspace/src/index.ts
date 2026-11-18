@@ -5,6 +5,7 @@
  * @module @deepseek-ai/dsh-workspace
  */
 
+import { HarnessError } from '@deepseek-ai/dsh-error'
 import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -56,18 +57,30 @@ export class WorkspaceUnknownSessionError extends Error {
 }
 
 /**
- * An archiveSession request named a session that at least one
+ * An archive or delete request named a session that at least one
  * `workspace/session-activity` listener reported active. Nothing was written;
- * `activity` names what must stop before the session can be archived.
+ * `activity` names what must stop before the operation can proceed.
  */
 export class WorkspaceActiveSessionError extends Error {
   /**
    * @param sessionId - The active session id.
    * @param activity - The reported activity, in listener order.
+   * @param operation - The refused operation.
    */
-  constructor(readonly sessionId: SessionId, readonly activity: readonly SessionActivity[]) {
-    super(`cannot archive session '${sessionId}': the session is active (${activity.map(entry => entry.kind).join(', ')})`)
+  constructor(readonly sessionId: SessionId, readonly activity: readonly SessionActivity[], operation: 'archive' | 'delete' = 'archive') {
+    super(`cannot ${operation} session '${sessionId}': the session is active (${activity.map(entry => entry.kind).join(', ')})`)
     this.name = 'WorkspaceActiveSessionError'
+  }
+}
+
+/** Permanent deletion failed; cleanup may be partial and can be retried. */
+export class SessionDeletionError extends HarnessError {
+  /**
+   * @param sessionId - affected Session.
+   * @param cause - failed lifecycle or storage operation.
+   */
+  constructor(readonly sessionId: SessionId, cause: unknown) {
+    super('Session deletion did not finish; retry deletion to complete cleanup.', 'SESSION_DELETE_FAILED', { cause })
   }
 }
 
@@ -146,6 +159,12 @@ declare module '@deepseek-ai/cordis' {
      */
     'workspace/session-stop'(request: SessionActivityRequest): Promise<void> | void
     /**
+     * Release the inactive Session's live runtime before erasing its stored log.
+     * @param request - Session blocked against new activation during deletion.
+     * @mode parallel
+     */
+    'workspace/session-deleting'(request: SessionActivityRequest): Promise<void> | void
+    /**
      * Admit optional follow-up work after durable archival and any stop requests.
      * Dispatched inside the registry's write queue: a listener registers its work
      * and returns, and runs the work and any unbounded I/O afterwards. Listener
@@ -194,6 +213,7 @@ export class WorkspaceRegistry extends Service {
   private readonly sessionPaths = new Map<SessionId, string>()
   private readonly missingSessionPaths = new Set<SessionId>()
   private readonly invalidSessionPaths = new Map<SessionId, string>()
+  private readonly deletingSessions = new Set<SessionId>()
   private operationTail: Promise<void> = Promise.resolve()
 
   private readonly host: WorkspaceEntityHost = {
@@ -239,24 +259,25 @@ export class WorkspaceRegistry extends Service {
    * Create or reuse a workspace for an existing directory. The fully qualified
    * path is canonicalized through `fs.realpath`; a relative, nonexistent, or
    * non-directory path rejects. Repeated calls for the same canonical path
-   * return the existing entity without changing its title.
+   * return the existing entity without changing its title; an explicitly different folder set rejects.
    * A newly created workspace is prepended to the durable registry order.
    * Different canonical paths may share a display title.
    * @param path - Existing directory to own, in a fully qualified path spelling.
    * @param title - Display title used only when a new record is created.
+   * @param additionalPaths - Additional existing directories, canonicalized and deduplicated before any write.
    * @returns the existing or newly durable workspace.
    */
-  // TODO: `title` lost its last production caller when the gateway's
-  // create-by-name branch was deleted
-  // (.agents/notes/archived/simplification/2026-07-31-one-route-to-add-a-workspace.md);
-  // drop the parameter with its @param clause and the `create(path, title?)`
-  // lines in this package's README pair.
-  async create(path: string, title?: string): Promise<Workspace> {
-    const canonical = await realpathNormalize(path)
-    if (!(await stat(canonical)).isDirectory()) {
-      throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
-    }
-    return await this.enqueueOperation(() => this.createCanonical(canonical, title))
+  async create(path: string, title?: string, additionalPaths?: readonly string[]): Promise<Workspace> {
+    const canonicalPaths = await Promise.all([path, ...(additionalPaths ?? [])].map(async (directory) => {
+      const canonical = await realpathNormalize(directory)
+      if (!(await stat(canonical)).isDirectory()) {
+        throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
+      }
+      return canonical
+    }))
+    const [canonical, ...extra] = [...new Set(canonicalPaths)]
+    if (canonical === undefined) throw new Error('a workspace requires a primary directory')
+    return await this.enqueueOperation(() => this.createCanonical(canonical, title, false, additionalPaths === undefined ? undefined : extra))
   }
 
   /**
@@ -408,6 +429,59 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
+   * Test whether permanent deletion currently blocks activation of a Session.
+   * @param sessionId - Session to test.
+   * @returns whether deletion is in progress.
+   */
+  isSessionDeleting(sessionId: SessionId): boolean {
+    return this.deletingSessions.has(sessionId)
+  }
+
+  /**
+   * Permanently delete one inactive Session, releasing its runtime and removing
+   * every stored generation, workspace membership, pin, and archive reference.
+   * Repeated calls finish any remaining cleanup. Running work refuses before
+   * mutation. Shared attachments, forked Sessions, and project files remain.
+   * Providers release runtimes through workspace/session-deleting and remove
+   * derived data through session/deleting. Cleanup failures reject and may
+   * leave partial effects; retry deletion to finish.
+   * @param sessionId - Session identity; missing Sessions are safe to delete again.
+   * @returns completion after storage and registry cleanup.
+   */
+  deleteSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      this.deletingSessions.add(sessionId)
+      try {
+        const activity = await this.ctx.waterfall(
+          'workspace/session-activity', { sessionId }, () => Promise.resolve([]),
+        )
+        if (activity.length > 0) throw new WorkspaceActiveSessionError(sessionId, activity, 'delete')
+        await this.ctx.parallel('workspace/session-deleting', { sessionId })
+        if (this.ctx.get('sessions')?.get(sessionId) !== undefined) {
+          throw new Error('Session runtime has not released its writer')
+        }
+        await this.ctx.sessionPersistence.delete(sessionId)
+        for (const workspace of this.entities.values()) await workspace.detachSession(sessionId)
+        const state = this.requireState()
+        await this.setState({
+          ...state,
+          archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+          pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
+        })
+        this.headers.delete(sessionId)
+        this.sessionPaths.delete(sessionId)
+        this.missingSessionPaths.delete(sessionId)
+        this.invalidSessionPaths.delete(sessionId)
+      } catch (error) {
+        if (error instanceof WorkspaceActiveSessionError) throw error
+        throw new SessionDeletionError(sessionId, error)
+      } finally {
+        this.deletingSessions.delete(sessionId)
+      }
+    })
+  }
+
+  /**
    * Unarchive one session durably by dropping it from the registry-global
    * archive set; the accounting slot was never touched, so the session
    * returns to its recorded position. Unarchiving runs no session-existence
@@ -529,9 +603,14 @@ export class WorkspaceRegistry extends Service {
     return undefined
   }
 
-  private async createCanonical(canonical: string, title?: string, firstUse = false): Promise<WorkspaceEntity> {
+  private async createCanonical(canonical: string, title?: string, firstUse = false, additionalPaths?: readonly string[]): Promise<WorkspaceEntity> {
     for (const entity of this.entities.values()) {
-      if (entity.path === canonical) return entity
+      if (entity.path !== canonical) continue
+      if (additionalPaths !== undefined && (additionalPaths.length !== entity.additionalPaths.length
+        || additionalPaths.some(path => !entity.additionalPaths.includes(path)))) {
+        throw new Error('This primary directory already belongs to a workspace with different folders')
+      }
+      return entity
     }
 
     const workspaceName = title ?? defaultWorkspaceTitle(canonical)
@@ -541,6 +620,7 @@ export class WorkspaceRegistry extends Service {
     const now = new Date().toISOString()
     const record: WorkspaceRecord = {
       path: canonical,
+      ...additionalPaths === undefined || additionalPaths.length === 0 ? {} : { additionalPaths: [...additionalPaths] },
       title: workspaceName,
       sessionIds: [],
       createdAt: now,
@@ -785,6 +865,10 @@ export class WorkspaceRegistry extends Service {
     const paths = new Map<string, WorkspaceId>()
     const accounted = new Map<SessionId, WorkspaceId>()
     for (const [id, record] of table.entries()) {
+      const folders = [record.path, ...(record.additionalPaths ?? [])]
+      if (folders.some(path => !fullyQualifiedWorkspacePath(path)) || new Set(folders).size !== folders.length) {
+        throw new Error(`workspace '${id}' has invalid or duplicate folder paths`)
+      }
       const pathHolder = paths.get(record.path)
       if (pathHolder !== undefined) {
         throw new Error(

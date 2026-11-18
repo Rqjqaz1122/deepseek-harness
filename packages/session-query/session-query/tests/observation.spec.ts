@@ -490,6 +490,7 @@ describe('SessionObservationReader cold path', () => {
     }
 
     class SwapPersistence extends SessionPersistence {
+  async delete(_id: SessionId): Promise<boolean> { throw new Error('deletion is not implemented by this test fixture') }
       static readCalls = 0
 
       create(): Promise<SessionHandle> {

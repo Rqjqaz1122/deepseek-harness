@@ -33,7 +33,7 @@ import {
   type SessionPersistenceRevision as PersistenceRevision,
 } from '@deepseek-ai/dsh-session-persistence'
 import { JsonlBackendTracker, JsonlSessionHandle, type StorageHandleState } from './storage.ts'
-import { SessionWriteLease } from './lease.ts'
+import { LEASE_FILENAME, SessionWriteLease } from './lease.ts'
 import { SESSION_FORMAT_VERSION, SessionId as makeSessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionId, SessionHeader, SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import {
@@ -292,6 +292,7 @@ class JsonlSessionPersistence extends SessionPersistence {
   /** Backend label for diagnostics and effects; shadows `Service.name` without changing the service key. */
   override readonly name = 'session-persistence-jsonl'
 
+  private readonly deleting = new Set<SessionId>()
   private root: string
   private compression: JsonlCompression
   /**
@@ -386,6 +387,7 @@ class JsonlSessionPersistence extends SessionPersistence {
    * @returns the open handle.
    */
   async open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
+    if (this.deleting.has(id)) throw new SessionPersistenceNotFoundError(id)
     options?.signal?.throwIfAborted()
     await this.ensureRootEncoding()
     options?.signal?.throwIfAborted()
@@ -416,6 +418,7 @@ class JsonlSessionPersistence extends SessionPersistence {
           inheritedEventCount: stored.inheritedEventCount,
         }
       }
+      if (this.deleting.has(id)) throw new SessionPersistenceNotFoundError(id)
       return this.tracker.adopt(new JsonlSessionHandle(this, id, stored.meta, 'read', state))
     }
     // A pending entry always belongs to an ACTIVE creator handle (close erases
@@ -561,6 +564,55 @@ class JsonlSessionPersistence extends SessionPersistence {
     }
     signal?.throwIfAborted()
     return snapshots
+  }
+
+  /**
+   * Erase every Session-owned artifact while holding the existing writer lock.
+   * The empty lock file stays to preserve cross-process inode exclusion.
+   * @param id - inactive Session to erase.
+   * @returns whether a log existed before removal.
+   */
+  async delete(id: SessionId): Promise<boolean> {
+    this.tracker.claimWrite(id)
+    this.deleting.add(id)
+    let lease: SessionWriteLease | undefined
+    try {
+      const selected = await this.findLog(id)
+      if (selected === undefined) {
+        await this.ctx.parallel('session/deleting', id)
+        await this.ctx.parallel('session/deleted', id)
+        return false
+      }
+      const dir = dirname(selected.currentPath)
+      lease = await this.acquireLease(id, undefined, dir)
+      const preparation = this.migrationPreparations.get(id)
+      preparation?.controller.abort(new Error('Session permanently deleted'))
+      if (preparation !== undefined) await preparation.promise.catch((_error: unknown) => {
+        // Deletion owns cancellation; the preparation cannot publish a generation.
+      })
+      this.migrationPreparations.delete(id)
+      for (const handle of [...this.tracker.openHandles]) {
+        if (handle.id === id) await handle.close()
+      }
+      await this.ctx.parallel('session/deleting', id)
+      const entries = (await readdir(dir)).filter(entry => entry !== LEASE_FILENAME)
+      // Keep the selected generation until predecessors are gone, so a failed
+      // deletion cannot make an older generation authoritative again.
+      entries.sort((a, b) => Number(join(dir, a) === selected.sourcePath) - Number(join(dir, b) === selected.sourcePath))
+      for (const entry of entries) await rm(join(dir, entry), { recursive: true, force: true })
+      if (process.platform !== 'win32') await this.syncDirPosix(dir)
+      this.coldLogMemo.delete(id)
+      await this.ctx.parallel('session/deleted', id)
+      return true
+    } finally {
+      this.coldLogMemo.delete(id)
+      try {
+        await lease?.release()
+      } finally {
+        this.tracker.releaseClaim(id)
+        this.deleting.delete(id)
+      }
+    }
   }
 
   // --- handle-facing storage internals (package-private via the handle class below) ---

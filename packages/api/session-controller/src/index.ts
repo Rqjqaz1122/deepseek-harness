@@ -224,6 +224,7 @@ export class SessionController extends TypertRemoteService {
     ctx.on('session/created', (session) => {
       ctx.emit('api-session/added', this.listState.summaryFor(session))
     })
+    ctx.on('session/deleted', (id) => { ctx.emit('api-session/deleted', id) })
     ctx.on('session/disposed', (session) => {
       ctx.emit('api-session/removed', session.id)
     })

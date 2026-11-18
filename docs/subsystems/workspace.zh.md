@@ -2,7 +2,7 @@
 
 [English](workspace.md) | 中文
 
-工作区（workspace）是用户工作目录的持久记录：一个建立在规范路径之上的稳定 id、一个显示标题，以及归属于它的会话的有序账本。该子系统是单个包（package）（[dsh-workspace](../../packages/workspace/workspace)，`ctx.workspaceRegistry`）——一项宿主侧可选能力，不属于 agent loop（智能体循环）主干，并且对模型不可见（没有工具、没有提示词文本、没有会话事件）。它通过[存储领域数据形式](storage.zh.md)存储自己的记录，并对照 [`SessionHeader.cwd`](persistence.zh.md#sessionheader--metadata-beside-the-log) 校验会话成员资格，因此 `storageDomain` 与 `sessionPersistence` 是必需的启动依赖：持久化这一依赖不可用时，插件保持 pending，而不是把这种不可用误当作空历史。设计记录：[领域 KV 存储 Agent Note（agent 决策记录）](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)；引导与 GUI 顺序：[Workspace UI 产品流程 Agent Note](../../.agents/notes/archived/feature/2026-07-25-workspace-ui-product-flow.md)。
+工作区（workspace）是用户工作目录的持久记录：一个建立在规范路径之上的稳定 id、一个显示标题，以及归属于它的会话的有序账本。该子系统是单个包（package）（[dsh-workspace](../../packages/workspace/workspace)，`ctx.workspaceRegistry`）——一项宿主侧可选能力，不属于 agent loop（智能体循环）主干，自身不定义模型工具或 Session 事件。组合 Sandbox Policy 时，该服务会把注册目录加入模型的已记录运行时上下文，并按现有沙箱模式解析写入授权。它通过[存储领域数据形式](storage.zh.md)存储自己的记录，并对照 [`SessionHeader.cwd`](persistence.zh.md#sessionheader--metadata-beside-the-log) 校验会话成员资格，因此 `storageDomain` 与 `sessionPersistence` 是必需的启动依赖：持久化这一依赖不可用时，插件保持 pending，而不是把这种不可用误当作空历史。设计记录：[领域 KV 存储 Agent Note（agent 决策记录）](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)；引导与 GUI 顺序：[Workspace UI 产品流程 Agent Note](../../.agents/notes/archived/feature/2026-07-25-workspace-ui-product-flow.md)。
 
 源码：[`packages/workspace/workspace/src/types.ts`](../../packages/workspace/workspace/src/types.ts)
 
@@ -40,6 +40,9 @@ interface Workspace {
    * afterwards, even when the directory disappears (see {@link status}).
    */
   readonly path: string
+
+  /** Additional canonical folders; the primary path remains the default command directory. */
+  readonly additionalPaths: readonly string[]
 
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
@@ -404,9 +407,16 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
 /**
- * Restore one archived Session to Workspace grouping surfaces.
- * @param request - Session identity to unarchive.
- * @returns the complete resulting archive set.
+ * Permanently delete an inactive Session through the shared domain entry.
+ * @param request - Session identity to erase.
+ * @returns confirmation after all deletion steps complete.
+ */
+@Remote('deleteSession') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceDeleteSessionValue>
+
+/**
+ * Restore one archived Session.
+ * @param request - Session to unarchive.
+ * @returns the resulting archive set.
  */
 @Remote('unarchiveSession') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
@@ -526,14 +536,15 @@ Durable workspace registry. Startup waits for `sessionPersistence`, builds one c
  * Create or reuse a workspace for an existing directory. The fully qualified
  * path is canonicalized through `fs.realpath`; a relative, nonexistent, or
  * non-directory path rejects. Repeated calls for the same canonical path
- * return the existing entity without changing its title.
+ * return the existing entity without changing its title; an explicitly different folder set rejects.
  * A newly created workspace is prepended to the durable registry order.
  * Different canonical paths may share a display title.
  * @param path - Existing directory to own, in a fully qualified path spelling.
  * @param title - Display title used only when a new record is created.
+ * @param additionalPaths - Additional existing directories, canonicalized and deduplicated before any write.
  * @returns the existing or newly durable workspace.
  */
-async create(path: string, title?: string): Promise<Workspace>
+async create(path: string, title?: string, additionalPaths?: readonly string[]): Promise<Workspace>
 
 /**
  * Initialize the default Workspace only while both the registry and Session
@@ -601,6 +612,26 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
  * @returns resolution after durability, any stop requests, and follow-up admission.
  */
 archiveSession(sessionId: SessionId, options: ArchiveSessionOptions = {}): Promise<void>
+
+/**
+ * Test whether permanent deletion currently blocks activation of a Session.
+ * @param sessionId - Session to test.
+ * @returns whether deletion is in progress.
+ */
+isSessionDeleting(sessionId: SessionId): boolean
+
+/**
+ * Permanently delete one inactive Session, releasing its runtime and removing
+ * every stored generation, workspace membership, pin, and archive reference.
+ * Repeated calls finish any remaining cleanup. Running work refuses before
+ * mutation. Shared attachments, forked Sessions, and project files remain.
+ * Providers release runtimes through workspace/session-deleting and remove
+ * derived data through session/deleting. Cleanup failures reject and may
+ * leave partial effects; retry deletion to finish.
+ * @param sessionId - Session identity; missing Sessions are safe to delete again.
+ * @returns completion after storage and registry cleanup.
+ */
+deleteSession(sessionId: SessionId): Promise<void>
 
 /**
  * Unarchive one session durably by dropping it from the registry-global
@@ -689,6 +720,23 @@ Admit optional follow-up work after durable archival and any stop requests. Disp
  * @mode parallel
  */
 'workspace/session-archived'(request: SessionActivityRequest): Promise<void> | void
+```
+
+Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)
+
+<a id="workspacesession-deleting--parallel"></a>
+
+#### `workspace/session-deleting` — parallel
+
+Release the inactive Session's live runtime before erasing its stored log.
+
+```ts cordis-catalog
+/**
+ * Release the inactive Session's live runtime before erasing its stored log.
+ * @param request - Session blocked against new activation during deletion.
+ * @mode parallel
+ */
+'workspace/session-deleting'(request: SessionActivityRequest): Promise<void> | void
 ```
 
 Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)

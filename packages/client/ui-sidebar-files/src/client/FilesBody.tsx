@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import type {
   InjectFace, PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, PropsStore,
@@ -39,7 +40,7 @@ export type FilesBodyProps =
 export function FilesBody(props: FilesBodyProps): ReactNode {
   const {
     useTabInfo, sessionId, useSessions, useStore, actions, refresh, focus, placeBeside,
-    setAutoRefresh, renderSlot, renderFactorySlot, t, useContextMenu,
+    setAutoRefresh, useWorkspaceFolders, renderSlot, renderFactorySlot, t, useContextMenu,
   } = props
   const { tab, panel } = useTabInfo()
   const { getTriggerProps } = useContextMenu()
@@ -51,7 +52,10 @@ export function FilesBody(props: FilesBodyProps): ReactNode {
     () => tab.actions.bindCommands({ refresh: () => { refresh(panel.id) } }),
     [tab.actions, panel.id, refresh],
   )
-  const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
+  const primary = useSessions(sessions => sessions.byId[sessionId]?.cwd)
+  const folders = useWorkspaceFolders(primary ?? '') ?? []
+  const selected = useStore(store => store.byPane[panel.id]?.selectedRoot)
+  const cwd = selected !== undefined && folders.includes(selected) ? selected : primary
   // The setting belongs to a listed tree, so there is nothing to set before one.
   const autoRefresh = useStore((store) => {
     const tree = store.byPane[panel.id]?.tree
@@ -72,6 +76,14 @@ export function FilesBody(props: FilesBodyProps): ReactNode {
   return (
     <div className={css.page} data-files-page>
       <div className={css.header}>
+        {folders.length > 1 && <select className={css.folderSelect} aria-label={t('folders.select')} title={cwd} value={cwd}
+          onChange={event => { actions.selectRoot(panel.id, event.target.value) }}>
+          {folders.map(path => {
+            const name = pathPartsOf(path).name
+            const label = folders.filter(folder => pathPartsOf(folder).name === name).length > 1 ? path : name
+            return <option key={path} value={path} title={path}>{label}</option>
+          })}
+        </select>}
         <PathLabel path={cwd} className={css.path} data-files-path
           {...getTriggerProps({ kind: 'directory', value: { sessionId, path: cwd } })} />
         <span hidden>

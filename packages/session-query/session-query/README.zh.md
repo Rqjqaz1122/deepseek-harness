@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+彻底删除 Session 时，通过 `session/deleting` 清除已准备观察缓存，并阻止延迟准备重新填入该缓存。调用方已持有的观察租约仍保留已读取值直至释放；删除不能撤回调用方已取得的字节。
+
 当你需要读取或搜索会话历史、而不直接触碰会话服务或存储后端时，从应用代码使用 `ctx.sessionQuery`。该服务由具体后端插件提供——已发布组合挂载 `@deepseek-ai/dsh-session-query-sqlite`（[README](../session-query-sqlite/README.zh.md)）——因此本包从不单独挂载。一旦组合了后端，以下全部能力都可在 `ctx.sessionQuery` 上使用。
 
 ### 你可以做什么

@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+`delete(id)` 在调用方释放实时运行时后擦除全部存储版本。活跃的本地或外部写入者会阻止删除，本地读句柄会关闭。不存在的 id 返回 `false`，成功移除返回 `true`。提供方在移除日志前等待 `session/deleting`，移除后等待 `session/deleted`，让派生数据所有者完成清理。失败可能留下部分效果，应重试删除。产品调用方使用 [WorkspaceRegistry.deleteSession](../../workspace/workspace/README.zh.md) 完成活动检查和注册表清理。
+
 挂载一个持久化后端即可让会话持久化。后端把自己注册为 `ctx.sessionPersistence`，并把每个已发布会话的实时事件路由进该会话的活跃写句柄；agent-loop——会话在生产环境中的发布点——在发布之前获取每个会话的写句柄，因此组合中的其他部分不变。
 
 ### 选择后端
@@ -33,7 +35,7 @@ seam 随产品交付 [JSONL](../session-persistence-jsonl/README.zh.md) 后端�
 
 ### 服务提供什么
 
-挂载后端后，五个服务方法寻址已存储会话：
+挂载后端后，服务方法寻址已存储会话：
 
 ```text
 const handle = await ctx.sessionPersistence.create(header)     // store a new session, take write ownership

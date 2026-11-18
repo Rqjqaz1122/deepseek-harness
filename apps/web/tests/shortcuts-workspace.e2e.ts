@@ -130,6 +130,7 @@ describe.skipIf(mode === 'record')('web e2e: workspace shortcuts', () => {
 
     await bind('Add workspace')
     await page.keyboard.press('Meta+Shift+Comma')
+    await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Add folder', exact: true }).click()
     const picker = page.getByRole('dialog', { name: 'Select Workspace Directory', exact: true })
     await picker.waitFor()
     await page.keyboard.press('Meta+Shift+Comma')
@@ -139,6 +140,7 @@ describe.skipIf(mode === 'record')('web e2e: workspace shortcuts', () => {
     await page.keyboard.press('Enter')
     await picker.getByRole('button', { name: 'Open', exact: true }).click()
     await picker.waitFor({ state: 'hidden' })
+    await page.getByRole('dialog', { name: 'Create workspace', exact: true }).getByRole('button', { name: 'Create', exact: true }).click()
     await expect.poll(() => scaffold.ctx.workspaceRegistry.resolveByPath(join(scaffold.workspaceCwd, 'keyboard-project'))).toBeDefined()
     const workspace = (await scaffold.ctx.workspaceRegistry.resolveByPath(join(scaffold.workspaceCwd, 'keyboard-project')))!
 

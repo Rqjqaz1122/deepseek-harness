@@ -24,6 +24,7 @@ import { posix, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-fs'
+import type {} from '@deepseek-ai/dsh-workspace'
 import type { FsDirEntry, FsInfo, FsPathInfo, FsTarget } from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-session'
@@ -61,6 +62,8 @@ export interface WorkspaceFileScope {
   readonly sessionId: SessionId
   /** Session workspace root, or the deployment fallback when its header has no cwd. */
   readonly workspaceRoot: string
+  /** Additional canonical folders of the registered Workspace, when present. */
+  readonly additionalPaths?: readonly string[]
 }
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
@@ -226,7 +229,9 @@ export class WorkspaceFiles extends TypertRemoteService {
             : undefined
           const header = live ?? stored?.header
           if (header === undefined) return undefined
+          const workspace = scope.get('workspaceRegistry')?.list().find(item => item.path === header.cwd)
           return {
+            ...workspace === undefined || workspace.additionalPaths.length === 0 ? {} : { additionalPaths: workspace.additionalPaths },
             sessionId,
             workspaceRoot: header.cwd ?? scope.sandboxPolicy.workspaceRoot,
           }
@@ -315,7 +320,8 @@ export class WorkspaceFiles extends TypertRemoteService {
    */
   @Remote
   async list(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing> {
-    const { root, workspaceRoot, entry } = await this.inspect(workspaceFileScope, path, signal)
+    const selectedScope = await this.directoryScope(workspaceFileScope, path, signal)
+    const { root, workspaceRoot, entry } = await this.inspect(selectedScope, path, signal)
     // A final link — a Windows junction or a symlink — is listed through the
     // directory it resolves to, matching the child type `listDir` reports for
     // that entry; `read` keeps its own no-follow gate on the final component.
@@ -364,7 +370,10 @@ export class WorkspaceFiles extends TypertRemoteService {
     const query = request.query.trim()
     if (query.length === 0) throw new RemoteError('gateway/bad-request', 'query must not be blank', {})
     signal.throwIfAborted()
-    const { workspaceRoot } = workspaceFileScope
+    const workspaceRoot = request.root ?? workspaceFileScope.workspaceRoot
+    if (![workspaceFileScope.workspaceRoot, ...(workspaceFileScope.additionalPaths ?? [])].includes(workspaceRoot)) {
+      throw new RemoteError('workspace-file/outside-workspace', 'Search root is outside the workspace folders', { path: workspaceRoot })
+    }
     const root = await this.ctx.fs.resolve(workspaceRoot, { signal })
     const info = await this.ctx.fs.stat(root, signal)
     if (info === undefined) {
@@ -398,7 +407,21 @@ export class WorkspaceFiles extends TypertRemoteService {
    */
   @Remote({ mode: 'stream' })
   changes(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame> {
-    return this.feed.follow(workspaceFileScope.workspaceRoot, path, signal)
+    return this.feed.follow(workspaceFileScope.workspaceRoot, path, signal, workspaceFileScope.additionalPaths)
+  }
+
+  /** Select a registered containing folder; canonical resolution still rejects symlink escapes. */
+  private async directoryScope(scope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceFileScope> {
+    if (path.length === 0) throw new RemoteError('gateway/bad-request', 'path is required', {})
+    if (scope.additionalPaths === undefined || scope.additionalPaths.length === 0) return scope
+    const target = await this.ctx.fs.resolve(path, { cwd: scope.workspaceRoot, signal })
+    const primary = await this.ctx.fs.resolve(scope.workspaceRoot, { signal })
+    if (this.ctx.fs.contains(primary, target)) return scope
+    for (const folder of scope.additionalPaths ?? []) {
+      const root = await this.ctx.fs.resolve(folder, { signal })
+      if (this.ctx.fs.contains(root, target)) return { ...scope, workspaceRoot: folder }
+    }
+    return scope
   }
 
   private async relativePath(scope: WorkspaceFileScope, baseFile: string, path: string, signal: AbortSignal): Promise<string> {

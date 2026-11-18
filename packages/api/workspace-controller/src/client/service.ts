@@ -1,4 +1,5 @@
 /** React-free Client Workspace service and command facade. */
+import type { WorkspaceCreateRequest } from '../types.ts'
 
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -31,6 +32,16 @@ export class WorkspaceArchiveError extends Error {
   }
 }
 
+/** A permanent Session deletion was refused or did not finish; rpcError retains the Host failure. */
+export class WorkspaceSessionDeleteError extends Error {
+  override readonly name = 'WorkspaceSessionDeleteError'
+
+  /** @param rpcError - structured Host or carrier failure; retry incomplete cleanup. */
+  constructor(readonly rpcError: RemoteFailure) {
+    super(`Session deletion failed: ${rpcError.code}: ${rpcError.message}`)
+  }
+}
+
 /** Bare observable source for the Workspace Controller snapshot. */
 export interface WorkspaceSource {
   /** Read the identity-stable current snapshot. */
@@ -52,7 +63,7 @@ export interface IWorkspaces {
    * @param input - Host create payload.
    * @returns the created or idempotently resolved Workspace.
    */
-  create(input: { path: string }): Promise<WorkspaceView>
+  create(input: WorkspaceCreateRequest): Promise<WorkspaceView>
   /**
    * Initialize or reuse the default Workspace.
    * @param signal - caller lifetime.
@@ -77,6 +88,12 @@ export interface IWorkspaces {
    * @param beforeWorkspaceId - anchor Workspace; omitted appends.
    */
   insertBefore(workspaceId: WorkspaceId, beforeWorkspaceId?: WorkspaceId): Promise<void>
+  /**
+   * Permanently erase an inactive Session and its history. Idempotent.
+   * @param sessionId - Session to delete.
+   * @throws {WorkspaceSessionDeleteError} with session-active or session-delete-failed on refusal or incomplete cleanup.
+   */
+  deleteSession(sessionId: SessionId): Promise<void>
   /**
    * Archive a Session from Workspace grouping surfaces.
    * @param sessionId - Session to archive.
@@ -127,7 +144,7 @@ export class WorkspaceController extends Service implements IWorkspaces {
     this.list = model
   }
 
-  async create(input: { path: string }): Promise<WorkspaceView> {
+  async create(input: WorkspaceCreateRequest): Promise<WorkspaceView> {
     const result = await this.model.create(input)
     if (!result.ok) throw new WorkspaceCreateError(result.error)
     return result.value.workspace
@@ -153,6 +170,11 @@ export class WorkspaceController extends Service implements IWorkspaces {
   async insertBefore(workspaceId: WorkspaceId, beforeWorkspaceId?: WorkspaceId): Promise<void> {
     const result = await this.model.insertBefore(workspaceId, beforeWorkspaceId)
     if (!result.ok) throw commandError('reorder', result.error)
+  }
+
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    const result = await this.model.deleteSession(sessionId)
+    if (!result.ok) throw new WorkspaceSessionDeleteError(result.error)
   }
 
   async archiveSession(sessionId: SessionId, options: { readonly stopActivity?: boolean } = {}): Promise<void> {

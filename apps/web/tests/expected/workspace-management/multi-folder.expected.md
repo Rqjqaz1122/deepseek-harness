@@ -1,0 +1,16 @@
+- dialog "Create workspace":
+  - heading "Create workspace" [level=2]
+  - button "Close"
+  - text: Workspace name
+  - textbox "Workspace name": Multi-folder product
+  - text: Folders
+  - button "Add folder"
+  - paragraph: Choose a primary folder for terminals and commands. Chats can access every folder.
+  - radio "Use {{cwd}}/multi-frontend as primary folder" [checked]
+  - text: {{cwd}}/multi-frontend
+  - button "Remove {{cwd}}/multi-frontend": Remove
+  - radio "Use {{cwd}}/multi-backend as primary folder"
+  - text: {{cwd}}/multi-backend
+  - button "Remove {{cwd}}/multi-backend": Remove
+  - button "Cancel"
+  - button "Create"

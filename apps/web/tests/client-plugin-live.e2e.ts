@@ -95,7 +95,7 @@ it('keeps ordered legacy Session menu rows before Archive and removes them with 
     await observe('menu-open', false, true)
     const menu = page.getByRole('menu')
     await menu.waitFor()
-    expect(await menu.getByRole('separator').count()).toBe(3)
+    expect(await menu.getByRole('separator').count()).toBe(4)
     const exportRow = menu.getByRole('menuitem', { name: 'Export session', exact: true })
     expect(await exportRow.locator('..').getByRole('separator').isVisible()).toBe(true)
     await compareOrRefreshGolden(
@@ -196,13 +196,13 @@ it('keeps ordered legacy Session menu rows before Archive and removes them with 
     await row.hover()
     await trigger.click()
     await menu.waitFor()
-    const remainingNames = ['Pin session', 'Rename', 'Fork session', 'Copy Session ID', 'Archive session']
+    const remainingNames = ['Pin session', 'Rename', 'Fork session', 'Copy Session ID', 'Archive session', 'Permanently delete session']
     const remainingItems = menu.getByRole('menuitem')
     expect(await remainingItems.count()).toBe(remainingNames.length)
     for (const [index, name] of remainingNames.entries()) {
       expect(await remainingItems.nth(index).and(menu.getByRole('menuitem', { name, exact: true })).count()).toBe(1)
     }
-    expect(await menu.getByRole('separator').count()).toBe(2)
+    expect(await menu.getByRole('separator').count()).toBe(3)
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await menu.getByRole('menuitem', { name: 'Copy Session ID', exact: true }).click()
     await expect.poll(() => menu.count()).toBe(0)

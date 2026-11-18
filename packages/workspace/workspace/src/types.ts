@@ -77,6 +77,9 @@ export interface Workspace {
    */
   readonly path: string
 
+  /** Additional canonical folders; the primary path remains the default command directory. */
+  readonly additionalPaths: readonly string[]
+
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
 

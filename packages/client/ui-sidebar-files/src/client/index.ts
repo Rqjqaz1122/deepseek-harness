@@ -1,3 +1,4 @@
+import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 /**
  * Browser half: register `files` as a right-Sidebar tab type, and the
@@ -71,6 +72,18 @@ export const inject = ['slots', 'locale', 'sidebarRightTabs', 'sidebarRight', 'r
  */
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
+  const emptyWorkspaces: WorkspaceSnapshot = {
+    items: [], archivedSessionIds: [], pinnedSessionIds: [], phase: 'ready', state: 'idle', error: null,
+  }
+  const workspaces = createSnapshotStore(emptyWorkspaces)
+  ctx.inject(['workspaces'], (scope) => {
+    scope.effect(() => {
+      const sync = (): void => { workspaces.set(scope.workspaces.list.getSnapshot()) }
+      sync()
+      const stop = scope.workspaces.list.subscribe(sync)
+      return () => { stop(); workspaces.set(emptyWorkspaces) }
+    }, 'ui-sidebar-files: workspace folders')
+  })
   const handle = createFilesStore()
   // One book for the plugin, not per Session: Sessions rooted at the same workspace share its preferences.
   const preferences = createSearchPreferenceBook(createSnapshotStore<unknown>({}, { persist: { name: SEARCH_PREFERENCES_KEY } }))
@@ -87,7 +100,7 @@ export function apply(ctx: ClientContext): void {
         return () => { active = false; unsubscribe() }
       }, 'ui-sidebar-files: tab navigation'),
     }
-  }, createSearch(ctx.remote), preferences)
+  }, createSearch(ctx.remote), preferences, workspaces)
   // A Factory runs its inject per occurrence, so each store instance gets its
   // one face when it is minted. The shortcut, which acts outside any body, finds
   // the face placed beside the target tab; a tab's loading and loaded drawings

@@ -257,6 +257,10 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
     ctx.effect(() => {
       return () => this._optionalPersistenceFiber.dispose()
     }, 'sessionQuerySqlite.optionalPersistence')
+    ctx.on('session/deleted', () => this._serialized(undefined, async () => {
+      if (this._db === undefined) return
+      await this._reconcile(undefined)
+    }))
     ctx.effect(() => async () => this.close(), 'sessionQuerySqlite.close')
   }
 

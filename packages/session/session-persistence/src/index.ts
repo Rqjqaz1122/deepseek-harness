@@ -119,6 +119,22 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionPersistence: SessionPersistence
   }
+  interface Events {
+    /**
+     * Remove derived Session data before its stored log is erased. Listeners must
+     * finish queued writes and prevent retained observations from restoring caches.
+     * Failure aborts log removal; callers may retry the deletion.
+     * @param id - Session whose write ownership is reserved for deletion.
+     * @mode parallel
+     */
+    'session/deleting'(id: SessionId): Promise<void> | void
+    /**
+     * A stored Session was permanently removed, including all log generations.
+     * @param id - removed Session identity.
+     * @mode parallel
+     */
+    'session/deleted'(id: SessionId): Promise<void> | void
+  }
 }
 
 /**
@@ -185,6 +201,17 @@ export abstract class SessionPersistence extends Service {
    *   remaining handles still flush.
    */
   abstract flush(): Promise<void>
+
+  /**
+   * Erase all stored generations of an inactive Session. Callers must first
+   * release its live Agent; an active writer, including another process, refuses
+   * deletion. Read handles are closed. Missing ids resolve as a no-op.
+   * Project files and shared attachment objects are outside this operation.
+   * A failure may leave partial cleanup; retry this operation to finish.
+   * @param id - stored Session identity.
+   * @returns whether a stored log was removed.
+   */
+  abstract delete(id: SessionId): Promise<boolean>
 
   /**
    * Observe one stored session without reading its event log or taking

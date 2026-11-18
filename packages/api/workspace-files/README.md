@@ -25,6 +25,8 @@ Use this package to preview files readable through a Session's filesystem from t
 <a id="use-this-package"></a>
 ## Use this package
 
+Directory listings and watches admit every folder of the registered Workspace matching the Session’s primary directory, without admitting their common parent. Canonical containment checks still reject symlink escapes outside all registered folders. `search` accepts an optional `root` that must exactly name a registered folder; omitted selects the primary directory, and results remain relative to the selected root. Preview reads retain their existing filesystem read authority.
+
 Mount the package beside `dsh-fs`, `dsh-sandbox-policy`, the Session store, and the Typert Gateway; the bundle does so right after the Session Controller. Every method takes the Session identity on the wire, so a Client calls `remote.workspaceFiles.read(sessionId, path, range, signal)`, `stat(sessionId, path, signal)`, `readBytes(sessionId, path, options, signal)`, `list(sessionId, path, signal)`, `search(sessionId, request, signal)`, or `changes(sessionId, path, signal)` and never names a root itself. The Host reads a live Session header or uses persistence `stat` for a cold Session; it does not activate an Agent, read the event body, or borrow a parent Session's root. Session persistence is optional for live reads, but without it a cold Session cannot resolve and the Gateway returns `gateway/lookup-not-found`.
 
 | Method | Returns | Purpose |

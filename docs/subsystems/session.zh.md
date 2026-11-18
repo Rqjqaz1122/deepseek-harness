@@ -1296,6 +1296,25 @@ A Session became visible or its Agent was created or disposed. Consumers upsert 
 
 Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
 
+<a id="api-sessiondeleted--emit"></a>
+
+#### `api-session/deleted` — emit
+
+A Session's durable history was permanently deleted.
+
+```ts cordis-catalog
+/**
+ * A Session's durable history was permanently deleted.
+ * @param sessionId - removed Session identity.
+ * @mode emit
+ */
+'api-session/deleted'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.zh.md)
+
+Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
+
 <a id="api-sessionerror--emit"></a>
 
 #### `api-session/error` — emit
@@ -1384,6 +1403,46 @@ Read-only creation announcement after store entry. New events reject until every
 Types: [Scoped](scope.zh.md)
 
 Source: [`packages/core/session/src/index.ts`](../../packages/core/session/src/index.ts)
+
+<a id="sessiondeleted--parallel"></a>
+
+#### `session/deleted` — parallel
+
+A stored Session was permanently removed, including all log generations.
+
+```ts cordis-catalog
+/**
+ * A stored Session was permanently removed, including all log generations.
+ * @param id - removed Session identity.
+ * @mode parallel
+ */
+'session/deleted'(id: SessionId): Promise<void> | void
+```
+
+Types: [SessionId](core.zh.md)
+
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
+
+<a id="sessiondeleting--parallel"></a>
+
+#### `session/deleting` — parallel
+
+Remove derived Session data before its stored log is erased. Listeners must finish queued writes and prevent retained observations from restoring caches. Failure aborts log removal; callers may retry the deletion.
+
+```ts cordis-catalog
+/**
+ * Remove derived Session data before its stored log is erased. Listeners must
+ * finish queued writes and prevent retained observations from restoring caches.
+ * Failure aborts log removal; callers may retry the deletion.
+ * @param id - Session whose write ownership is reserved for deletion.
+ * @mode parallel
+ */
+'session/deleting'(id: SessionId): Promise<void> | void
+```
+
+Types: [SessionId](core.zh.md)
+
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
 
 <a id="sessiondisposed--emit"></a>
 
