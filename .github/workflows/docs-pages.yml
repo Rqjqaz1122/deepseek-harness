@@ -1,17 +1,21 @@
-# Publish the documentation website to GitHub Pages. This workflow is manual-only
-# (workflow_dispatch) and intentionally does not listen to pull_request or push:
-# the site presents a released snapshot, so publication is an explicit act from a
-# dsh-v* tag and must never appear as a PR check. `release:verify` rejects every
-# other ref, and the github-pages environment repeats that restriction as a
-# deployment tag policy with required reviewers.
-#
-# The build signal does not depend on this workflow. Every pull request builds
-# the production site through `check:ci:static`, and ci-master.yml builds it
-# again on master.
-name: Deploy documentation
+# One Pages deployment owner. DESKTOP_UPDATE_PAGES reserves this repository's
+# site for installer metadata; documentation publication then fails explicitly.
+name: Deploy GitHub Pages
 
 on:
   workflow_dispatch:
+    inputs:
+      site:
+        description: Pages content to publish
+        type: choice
+        default: documentation
+        options: [documentation, desktop-updates]
+  workflow_call:
+    inputs:
+      desktop_updates:
+        description: Publish installer metadata after Release assets are uploaded
+        type: boolean
+        required: true
 
 concurrency:
   group: github-pages
@@ -35,11 +39,17 @@ env:
 
 jobs:
   build:
+    if: inputs.desktop_updates != true && inputs.site != 'desktop-updates'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
       pages: read
     steps:
+      - name: Check Pages site ownership
+        if: vars.DESKTOP_UPDATE_PAGES == 'true'
+        run: |
+          echo '::error::This Pages site is reserved for desktop updates. Use the desktop-updates publication mode.'
+          exit 1
       # Complete history: the release scripts read tags.
       - uses: actions/checkout@v7.0.1
         with:
@@ -78,8 +88,58 @@ jobs:
         with:
           path: website/.dist
 
+  desktop-updates:
+    if: inputs.desktop_updates == true || inputs.site == 'desktop-updates'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check Pages site ownership
+        if: vars.DESKTOP_UPDATE_PAGES != 'true'
+        run: |
+          echo '::error::Set repository variable DESKTOP_UPDATE_PAGES=true and configure Pages to use GitHub Actions before publishing desktop metadata.'
+          exit 1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Prepare manifest generator dependencies
+        id: generator
+        run: |
+          tools="$RUNNER_TEMP/desktop-update-tools"
+          mkdir -p "$tools/apps/desktop/scripts" "$tools/apps/desktop/src"
+          cp apps/desktop/scripts/generate-update-manifests.ts "$tools/apps/desktop/scripts/"
+          cp apps/desktop/src/github-update-manifest.ts "$tools/apps/desktop/src/"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          const root = JSON.parse(readFileSync('package.json', 'utf8'))
+          const dependencies = Object.fromEntries(['semver', 'zod'].map(name => [name, root.devDependencies[name]]))
+          if (Object.values(dependencies).some(value => typeof value !== 'string')) throw new Error('Missing manifest generator dependency')
+          writeFileSync(join(process.env.RUNNER_TEMP, 'desktop-update-tools', 'package.json'), JSON.stringify({ private: true, type: 'module', dependencies }))
+          NODE
+          npm install --prefix "$tools" --ignore-scripts --no-package-lock --no-audit --no-fund
+      - name: Read published releases and generate channel manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/desktop-release-pages.json"
+          node "$RUNNER_TEMP/desktop-update-tools/apps/desktop/scripts/generate-update-manifests.ts" \
+            --repository "$GITHUB_REPOSITORY" --input "$RUNNER_TEMP/desktop-release-pages.json" --output .pages-site
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: .pages-site
+
   deploy:
-    needs: build
+    needs: [build, desktop-updates]
+    if: ${{ !cancelled() && (needs.build.result == 'success' || needs.desktop-updates.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       pages: write

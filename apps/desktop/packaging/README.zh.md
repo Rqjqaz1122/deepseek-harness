@@ -168,6 +168,10 @@ pnpm run package:desktop:win:x64:unsigned
 
 ## GitHub Release 自动打包
 
+公开仓库使用 Pages 更新清单时，设置仓库变量 `DESKTOP_UPDATE_PAGES=true`，再在 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。该变量将仓库默认的 `github.io` 站点保留给更新清单；启用期间，文档发布模式拒绝部署。不支持自定义 Pages 域名。[共用 Pages 工作流](../../../.github/workflows/docs-pages.yml) 提供 `desktop-updates` 模式，用于首次发布以及 Release 编辑、资产替换或删除后的清单刷新。此模式仅在临时工具目录安装 `semver` 和 `zod`，并禁用生命周期脚本；不安装仓库开发工具。
+
+安装包上传成功后，Release 工作流调用 Pages 工作流。它使用工作流临时 GitHub Token 读取全部分页 Release，排除草稿及未完成的安装包，再发布 `updates/stable.json` 和 `updates/nightly.json`。Stable 排除预发布；Nightly 包含正式版及预发布。每个兼容安装包必须带 GitHub SHA-256 摘要；缺失时发布失败，保留此前已部署的站点。两个文件通过同一个 Pages 并发组一起部署。对于当前配置的仓库，检查[开发版清单](https://rqjqaz1122.github.io/deepseek-harness/updates/nightly.json) 已包含新上传的版本；客户端无需 GitHub Token。仍查询 REST API 的旧客户端需要先手动升级一次，才能使用 Pages 清单。
+
 工作流在安装锁定的打包依赖前，从临时根清单和锁文件 importer 中移除 `oxlint` 与 `oxlint-tsgolint`。它不安装或运行这两个工具；其他锁定依赖和已提交的清单保持不变。
 
 [Release macOS installer 工作流](../../../.github/workflows/macos-github-release.yml) 在发布标签为 `desktop-v<version>` 的 Release 时，使用 GitHub 托管的 `macos-15` runner 构建未签名 Apple Silicon DMG。标签对应的源码必须包含该工作流，版本必须匹配或扩展该源码的产品版本。例如，产品 `0.2.2-rc.2` 可使用 `desktop-v0.2.2-rc.2.20261116.1`；带预发布后缀的版本须勾选 **pre-release**。发布 Release 即选择并确认该构建版本；仅保存草稿或推送标签不会启动此工作流。
