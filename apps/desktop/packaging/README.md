@@ -168,6 +168,8 @@ Run `pnpm install --frozen-lockfile`, then `pnpm run package:desktop:win:x64:uns
 
 ## GitHub Release automation
 
+The workflow omits `oxlint` and `oxlint-tsgolint` from its temporary root manifest and lockfile importers before installing locked packaging dependencies. It does not install or run these tools; other locked dependencies and the committed manifests remain unchanged.
+
 The [Release macOS installer workflow](../../../.github/workflows/macos-github-release.yml) builds an unsigned Apple Silicon DMG on GitHub's hosted `macos-15` runner when a Release is published with a `desktop-v<version>` tag. The tag must include this workflow and its version must match or extend the checkout's product version. For example, product `0.2.2-rc.2` accepts `desktop-v0.2.2-rc.2.20261116.1`; mark versions with prerelease suffixes as **pre-release**. Publishing the Release selects and confirms that build version; saving a draft or pushing a tag alone does not start this workflow.
 
 After packaging checks and DMG verification succeed, the workflow uploads the installer and `SHA256SUMS.txt` to that Release using the repository's built-in token. Enable Actions and allow workflow content writes in repository policy; no personal token, Apple certificate, machine preset or self-hosted runner is required. Review failures in Actions and rerun failed jobs after correcting the cause; existing assets are never overwritten. Packaging diagnostics are retained for 14 days. These unsigned packages require manual installation, omit the macOS Computer Use helper, and have no Apple notarization; see [unsigned macOS limitations](#local-macos-dmg-without-release-signing).

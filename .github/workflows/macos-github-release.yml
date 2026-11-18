@@ -36,6 +36,28 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Exclude disabled lint tools from packaging dependencies
+        id: build-dependencies
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs'
+          const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+          for (const name of ['oxlint', 'oxlint-tsgolint']) {
+            if (!(name in manifest.devDependencies)) throw new Error(`Missing root dependency: ${name}`)
+            delete manifest.devDependencies[name]
+          }
+          const lockfile = readFileSync('pnpm-lock.yaml', 'utf8')
+          const packages = lockfile.indexOf('\npackages:\n')
+          if (packages < 0) throw new Error('Missing lockfile package records')
+          let removed = 0
+          const importers = lockfile.slice(0, packages).replace(
+            /^      (?:oxlint|oxlint-tsgolint):\n(?:        [^\n]*\n)+/gm,
+            () => { removed += 1; return '' },
+          )
+          if (removed !== 2) throw new Error('Expected exactly two disabled root lint dependencies')
+          writeFileSync('package.json', `${JSON.stringify(manifest, null, 2)}\n`)
+          writeFileSync('pnpm-lock.yaml', importers + lockfile.slice(packages))
+          NODE
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Validate release version and build host

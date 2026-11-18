@@ -57,3 +57,26 @@ it('requires prerelease status for prerelease versions', () => {
 it('rejects an Intel runner before packaging', () => {
   expect(() => validate(`desktop-v${version}`, true, 'x64')).toThrow('Apple Silicon runner')
 })
+
+it('excludes disabled lint dependencies while retaining every other locked build dependency', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'macos-release-dependencies-'))
+  try {
+    const manifest = readFileSync(join(root, 'package.json'), 'utf8')
+    const lockfile = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')
+    writeFileSync(join(directory, 'package.json'), manifest)
+    writeFileSync(join(directory, 'pnpm-lock.yaml'), lockfile)
+    const step = workflow.jobs.package.steps.find(step => step.id === 'build-dependencies')!
+    const script = step.run!.split("<<'NODE'\n")[1]!.split('\nNODE')[0]!
+    execFileSync(process.execPath, ['--input-type=module', '--eval', script], { cwd: directory, stdio: 'pipe' })
+    const before = JSON.parse(manifest) as { devDependencies: Record<string, string> }
+    delete before.devDependencies.oxlint
+    delete before.devDependencies['oxlint-tsgolint']
+    expect(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))).toEqual(before)
+    const expected = load(lockfile) as { importers: { '.': { devDependencies: Record<string, object> } } }
+    delete expected.importers['.'].devDependencies.oxlint
+    delete expected.importers['.'].devDependencies['oxlint-tsgolint']
+    expect(load(readFileSync(join(directory, 'pnpm-lock.yaml'), 'utf8'))).toEqual(expected)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

@@ -168,6 +168,8 @@ pnpm run package:desktop:win:x64:unsigned
 
 ## GitHub Release 自动打包
 
+工作流在安装锁定的打包依赖前，从临时根清单和锁文件 importer 中移除 `oxlint` 与 `oxlint-tsgolint`。它不安装或运行这两个工具；其他锁定依赖和已提交的清单保持不变。
+
 [Release macOS installer 工作流](../../../.github/workflows/macos-github-release.yml) 在发布标签为 `desktop-v<version>` 的 Release 时，使用 GitHub 托管的 `macos-15` runner 构建未签名 Apple Silicon DMG。标签对应的源码必须包含该工作流，版本必须匹配或扩展该源码的产品版本。例如，产品 `0.2.2-rc.2` 可使用 `desktop-v0.2.2-rc.2.20261116.1`；带预发布后缀的版本须勾选 **pre-release**。发布 Release 即选择并确认该构建版本；仅保存草稿或推送标签不会启动此工作流。
 
 打包检查和 DMG 验证通过后，工作流使用仓库内置 Token 将安装包和 `SHA256SUMS.txt` 上传到该 Release。仓库须启用 Actions，并允许工作流写入仓库内容；不需要个人 Token、Apple 证书、机器 preset 或自托管 runner。在 Actions 中查看失败原因，修复后重跑失败任务；已有附件不会被覆盖。打包诊断保留 14 天。这些未签名包须手动安装，不含 macOS Computer Use helper，也未经 Apple 公证；详见[未签名 macOS 限制](#local-macos-dmg-without-release-signing)。
